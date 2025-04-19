@@ -211,8 +211,10 @@
           }
 
           // Calculate overall stats
+          const totalCharCount = testWords.reduce((sum, word) => sum + word.length, 0);
+          const spacesCount = testWords.length - 1;
           const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
-          const overallWPM = testWords.length / totalTimeMin;
+          const overallWPM = ((totalCharCount + spacesCount) / 5) / totalTimeMin;
           testWPMHistory.push(parseFloat(overallWPM.toFixed(1)));
 
           // Update slow10WPMHistory
@@ -295,8 +297,10 @@
       }
 
       // Calculate overall WPM for the whole test
+      const totalCharCount = testWords.reduce((sum, word) => sum + word.length, 0);
+      const spacesCount = testWords.length - 1;
       const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
-      const overallWPM = testWords.length / totalTimeMin;
+      const overallWPM = ((totalCharCount + spacesCount) / 5) / totalTimeMin;
 
       // Save the overall WPM for the chart
       testWPMHistory.push(parseFloat(overallWPM.toFixed(1)));
@@ -693,7 +697,9 @@
     // Update handleCorrectWord to refresh stats after each word
     function handleCorrectWord(word) {
       const now = performance.now();
-      const duration = (now - startTime) / 1000 / 60;
+      const duration = (now - startTime) / 1000 / 60; // czas w minutach
+
+      // Oblicz WPM przy użyciu liczby znaków / 5
       const wordLetterCount = word.length;
       const wpm = (wordLetterCount / 5) / duration; // Calculate WPM based on letter count
 
