@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Typing Trainer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: #121212;
+      color: #e0e0e0;
+    }
+
+    .word-list {
+      margin-bottom: 20px;
+      font-size: 3em;
+    }
+
+    .word-list span {
+      margin-right: 5px;
+    }
+
+    .current {
+      text-decoration: underline;
+    }
+
+    .correct {
+      color: #00e676;
+    }
+
+    .incorrect {
+      color: #ff1744;
+    }
+
+    input {
+      width: 100%;
+      font-size: 3em;
+      padding: 5px;
+      background: #1e1e1e;
+      color: #fff;
+      border: 1px solid #555;
+    }
+
+    .results,
+    .stats {
+      margin-top: 20px;
+    }
+
+    .highlight {
+      font-weight: bold;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+      background-color: #1e1e1e;
+    }
+
+    th,
+    td {
+      border: 1px solid #333;
+      padding: 8px;
+      text-align: left;
+      color: #fff;
+    }
+
+    th {
+      background-color: #2e2e2e;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 1em;
+      background-color: #333;
+      color: #fff;
+      border: 1px solid #666;
+      cursor: pointer;
+    }
+
+    .global-stats {
+      display: flex;
+      gap: 2em;
+      font-size: 1.2em;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Typing Trainer</h1>
+  <div class="word-list" id="wordList"></div>
+  <input type="text" id="input" placeholder="Start typing..." autofocus />
+  <div class="stats" id="stats"></div>
+  <div class="results" id="results"></div>
+  <button onclick="resetStats()">Reset All Stats</button>
+
+  <script>
+    let english1k = [];
+    let testWords = [];
+    let startTime = null;
+    let testStartTime;
+    let currentIndex = 0;
+    let wordStats = {};
+    let history = [];
+    let slowestWords = [];
+
+    function loadStatsFromStorage() {
+      const saved = localStorage.getItem('wordStats');
+      if (saved) {
+        try {
+          wordStats = JSON.parse(saved);
+        } catch (e) {
+          wordStats = {};
+        }
+      }
+    }
+
+    function saveStatsToStorage() {
+      localStorage.setItem('wordStats', JSON.stringify(wordStats));
+    }
+
+    function resetStats() {
+      wordStats = {};
+      saveStatsToStorage();
+      startTest();
+    }
+
+    function getTestWords() {
+      if (Object.keys(wordStats).length === 0) {
+        return english1k.sort(() => 0.5 - Math.random()).slice(0, 20);
+      }
+      slowestWords = Object.entries(wordStats)
+        .map(([word, stats]) => {
+          const last5 = stats.last5 || [];
+          const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : Infinity;
+          return { word, avg5 };
+        })
+        .sort((a, b) => a.avg5 - b.avg5)
+        .slice(0, 10)
+        .map(e => e.word);
+
+      const random = english1k.sort(() => 0.5 - Math.random()).slice(0, 10);
+      return [...new Set([...slowestWords, ...random])].slice(0, 20);
+    }
+
+    function renderWords() {
+      const container = document.getElementById("wordList");
+      container.innerHTML = testWords.map((word, i) => {
+        let cls = "";
+        if (i === currentIndex) cls = "current";
+        else if (i < currentIndex) cls = "correct";
+        if (slowestWords.includes(word)) cls += " highlight";
+        return `<span class="${cls}">${word}</span>`;
+      }).join(" ");
+    }
+
+    function renderStats() {
+      const statsDiv = document.getElementById("stats");
+
+      const entries = Object.entries(wordStats).map(([word, data]) => {
+        const last5 = data.last5 || [];
+        const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : 0;
+        return { word, count: last5.length, avg5, avg: data.avg, last: data.last };
+      });
+
+      const lastAvg = entries.length
+        ? (entries.map(e => e.last).reduce((a, b) => a + b, 0) / entries.length).toFixed(1)
+        : "-";
+      const overallAvg = entries.length
+        ? (entries.map(e => e.avg).reduce((a, b) => a + b, 0) / entries.length).toFixed(1)
+        : "-";
+      const slow10 = [...entries].sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
+      const slow10Avg = slow10.length
+        ? (slow10.map(e => e.avg5).reduce((a, b) => a + b, 0) / slow10.length).toFixed(1)
+        : "-";
+
+      let html = `
+        <div class="global-stats">
+          <div><strong>LAST WPM:</strong> ${lastAvg}</div>
+          <div><strong>AVG WPM:</strong> ${overallAvg}</div>
+          <div><strong>10 slowest WPM:</strong> ${slow10Avg}</div>
+        </div>`;
+
+      html += '<h2>Word Stats</h2><table><tr><th>#</th><th>Word</th><th>Count</th><th>Avg Last 5</th><th>Overall Avg</th><th>Last</th></tr>';
+      entries
+        .sort((a, b) => a.avg5 - b.avg5)
+        .forEach((entry, idx) => {
+          const cls = idx < 10 ? 'highlight' : '';
+          html += `<tr class="${cls}">
+            <td>${idx + 1}</td>
+            <td>${entry.word}</td>
+            <td>${entry.count}</td>
+            <td>${entry.avg5.toFixed(1)}</td>
+            <td>${entry.avg.toFixed(1)}</td>
+            <td>${entry.last.toFixed(1)}</td>
+          </tr>`;
+        });
+      html += '</table>';
+      statsDiv.innerHTML = html;
+    }
+
+    function startTest() {
+      testWords = getTestWords();
+      currentIndex = 0;
+      testStartTime = null;
+      startTime = null;
+      document.getElementById("input").value = "";
+      history = [];
+      renderWords();
+      renderStats();
+      document.getElementById("input").focus();
+    }
+
+    function handleCorrectWord(word) {
+      const now = performance.now();
+      const duration = (now - startTime) / 1000 / 60;
+      const wpm = 1 / duration;
+
+      if (!wordStats[word]) wordStats[word] = { avg: wpm, last: wpm, last5: [wpm] };
+      else {
+        wordStats[word].avg = (wordStats[word].avg * 0.8 + wpm * 0.2);
+        wordStats[word].last = wpm;
+        wordStats[word].last5 = (wordStats[word].last5 || []).slice(-4).concat(wpm);
+      }
+
+      saveStatsToStorage();
+      history.push({ word, wpm });
+      currentIndex++;
+      startTime = now;
+    }
+
+    function showResults() {
+      const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
+      const overallWPM = testWords.length / totalTimeMin;
+      const resultsDiv = document.getElementById("results");
+      const sortedHistory = [...history].sort((a, b) => b.wpm - a.wpm);
+
+      const newResults = document.createElement("div");
+      newResults.innerHTML = `<h2>Results</h2><p>Overall WPM: ${overallWPM.toFixed(1)}</p>` +
+        `<table><tr><th>Word</th><th>WPM</th></tr>` +
+        sortedHistory.map(h => `<tr><td>${h.word}</td><td>${h.wpm.toFixed(1)}</td></tr>`).join("") +
+        `</table>`;
+      resultsDiv.appendChild(newResults);
+    }
+
+    document.getElementById("input").addEventListener("input", function () {
+      const typed = this.value.trim();
+      const expected = testWords[currentIndex];
+      if (!testStartTime && typed.length > 0) {
+        testStartTime = performance.now();
+        startTime = testStartTime;
+      }
+
+      const currentWordEl = document.querySelector(".current");
+      if (expected.startsWith(typed)) {
+        currentWordEl.classList.remove("incorrect");
+      } else {
+        currentWordEl.classList.add("incorrect");
+      }
+
+      if (typed === expected && currentIndex === testWords.length - 1) {
+        handleCorrectWord(expected);
+        showResults();
+        startTest();
+      }
+    });
+
+    document.getElementById("input").addEventListener("keydown", function (e) {
+      if (e.key === " ") {
+        e.preventDefault();
+        const word = this.value.trim();
+        const expected = testWords[currentIndex];
+        if (word !== expected || currentIndex === testWords.length - 1) return;
+        handleCorrectWord(expected);
+        this.value = "";
+        renderWords();
+        renderStats();
+      } else if (e.key === "Escape" || e.key === "Tab") {
+        e.preventDefault();
+        startTest();
+      }
+    });
+
+    fetch('https://raw.githubusercontent.com/SMenigat/thousand-most-common-words/master/words/en.json')
+      .then(res => res.json())
+      .then(data => {
+        english1k = data.words.map(w => w.englishWord).filter(w => w);
+        loadStatsFromStorage();
+        startTest();
+      });
+  </script>
+</body>
+
+</html>
