@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Typing Trainer</title>
+  <title>10 Slow Words</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -104,12 +104,13 @@
 </head>
 
 <body>
-  <h1>Typing Trainer</h1>
+  <h1>10 Slow Words</h1>
   <div class="word-list" id="wordList"></div>
   <input type="text" id="input" placeholder="Start typing..." autofocus />
+  <div class="results" id="results"></div>
   <div class="stats" id="stats"></div>
   <canvas id="wpmChart" width="800" height="400"></canvas>
-  <div class="results" id="results"></div>
+  <canvas id="wordsScatterChart" width="800" height="400"></canvas>
   <button onclick="resetStats()">Reset All Stats</button>
   <button onclick="toggleTheme()">Toggle Dark Mode</button>
 
@@ -124,26 +125,37 @@
     let slowestWords = [];
     let chart;
     let slow10WPMHistory = [];
+    let testWPMHistory = [];
+
+    // Add these variables at the top to track sorting
+    let currentSortColumn = 'avg5'; // Default sort by Avg Last 5
+    let currentSortDirection = 'asc'; // Default ascending order
 
     function loadStatsFromStorage() {
       const stats = localStorage.getItem('wordStats');
       const historyData = localStorage.getItem('slow10WPMHistory');
+      const testHistoryData = localStorage.getItem('testWPMHistory');
       if (stats) {
         try { wordStats = JSON.parse(stats); } catch { }
       }
       if (historyData) {
         try { slow10WPMHistory = JSON.parse(historyData); } catch { }
       }
+      if (testHistoryData) {
+        try { testWPMHistory = JSON.parse(testHistoryData); } catch { }
+      }
     }
 
     function saveStatsToStorage() {
       localStorage.setItem('wordStats', JSON.stringify(wordStats));
       localStorage.setItem('slow10WPMHistory', JSON.stringify(slow10WPMHistory));
+      localStorage.setItem('testWPMHistory', JSON.stringify(testWPMHistory));
     }
 
     function resetStats() {
       wordStats = {};
       slow10WPMHistory = [];
+      testWPMHistory = [];
       saveStatsToStorage();
       startTest();
     }
@@ -182,47 +194,111 @@
       const entries = Object.entries(wordStats).map(([word, data]) => {
         const last5 = data.last5 || [];
         const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : 0;
-        return { word, count: last5.length, avg5, avg: data.avg, last: data.last };
+        return {
+          word,
+          count: data.count || 0,
+          avg5,
+          avg: data.avg,
+          last: data.last
+        };
       });
 
-      const lastAvg = entries.length ? (entries.map(e => e.last).reduce((a, b) => a + b, 0) / entries.length).toFixed(1) : "-";
-      const overallAvg = entries.length ? (entries.map(e => e.avg).reduce((a, b) => a + b, 0) / entries.length).toFixed(1) : "-";
+      // Sort entries based on current sort column and direction
+      entries.sort((a, b) => {
+        let valueA = a[currentSortColumn];
+        let valueB = b[currentSortColumn];
 
-      let html = `
-        <div class="global-stats">
-          <div><strong>LAST WPM:</strong> ${lastAvg}</div>
-          <div><strong>AVG WPM:</strong> ${overallAvg}</div>
-        </div>`;
-      html += '<h2>Word Stats</h2><table><tr><th>#</th><th>Word</th><th>Count</th><th>Avg Last 5</th><th>Overall Avg</th><th>Last</th></tr>';
-      entries
-        .sort((a, b) => a.avg5 - b.avg5)
-        .forEach((entry, idx) => {
-          const rowClass = idx < 10 ? 'highlight' : ''; // Highlight first 10 rows
-          html += `<tr class="${rowClass}">
-            <td>${idx + 1}</td>
-            <td>${entry.word}</td>
-            <td>${entry.count}</td>
-            <td>${entry.avg5.toFixed(1)}</td>
-            <td>${entry.avg.toFixed(1)}</td>
-            <td>${entry.last.toFixed(1)}</td>
-          </tr>`;
-        });
+        // Special handling for text column (word)
+        if (currentSortColumn === 'word') {
+          return currentSortDirection === 'asc'
+            ? valueA.localeCompare(valueB)
+            : valueB.localeCompare(valueA);
+        }
+
+        // Numerical columns
+        return currentSortDirection === 'asc'
+          ? valueA - valueB
+          : valueB - valueA;
+      });
+
+      // Create table with clickable headers
+      let html = '<h2>Word Stats</h2><table><tr>';
+
+      // Define column structure for easier maintenance
+      const columns = [
+        { id: 'index', label: '#', sortable: false },
+        { id: 'word', label: 'Word', sortable: true },
+        { id: 'count', label: 'Count', sortable: true },
+        { id: 'avg5', label: 'Avg Last 5', sortable: true },
+        { id: 'avg', label: 'Overall Avg', sortable: true },
+        { id: 'last', label: 'Last', sortable: true }
+      ];
+
+      // Generate headers
+      columns.forEach(column => {
+        if (column.sortable) {
+          const sortIcon = currentSortColumn === column.id
+            ? (currentSortDirection === 'asc' ? '▲' : '▼')
+            : '';
+          html += `<th data-sort="${column.id}" class="sortable">${column.label} ${sortIcon}</th>`;
+        } else {
+          html += `<th>${column.label}</th>`;
+        }
+      });
+
+      html += '</tr>';
+
+      // Generate table rows
+      entries.forEach((entry, idx) => {
+        const rowClass = idx < 10 ? 'highlight' : '';
+        html += `<tr class="${rowClass}">
+          <td>${idx + 1}</td>
+          <td>${entry.word}</td>
+          <td>${entry.count}</td>
+          <td>${entry.avg5.toFixed(1)}</td>
+          <td>${entry.avg.toFixed(1)}</td>
+          <td>${entry.last.toFixed(1)}</td>
+        </tr>`;
+      });
+
       html += '</table>';
       statsDiv.innerHTML = html;
+
+      // Add event listeners to sortable headers
+      document.querySelectorAll('.sortable').forEach(header => {
+        header.addEventListener('click', function () {
+          const column = this.getAttribute('data-sort');
+
+          // Toggle direction if same column, otherwise set to asc
+          if (column === currentSortColumn) {
+            currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            currentSortColumn = column;
+            currentSortDirection = 'asc';
+          }
+
+          renderStats();
+        });
+      });
     }
 
     function renderChart() {
-      const avg5Line = slow10WPMHistory.map((_, i, arr) => {
-        const slice = arr.slice(Math.max(0, i - 4), i + 1);
-        return slice.reduce((a, b) => a + b, 0) / slice.length;
-      });
+      // Make sure we have data to show
+      if (testWPMHistory.length === 0) return;
+
+      // Calculate rolling average of the overall test WPMs (last 5 tests)
+      const avg5Line = [];
+      for (let i = 0; i < testWPMHistory.length; i++) {
+        const slice = testWPMHistory.slice(Math.max(0, i - 4), i + 1);
+        avg5Line.push(slice.reduce((a, b) => a + b, 0) / slice.length);
+      }
 
       const ctx = document.getElementById("wpmChart").getContext("2d");
       if (chart) chart.destroy();
       chart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: slow10WPMHistory.map((_, i) => i + 1),
+          labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
           datasets: [
             {
               label: 'Avg WPM of 10 Slowest Words',
@@ -234,7 +310,7 @@
               pointRadius: 4
             },
             {
-              label: 'Rolling Avg (last 5 tests)',
+              label: 'Rolling Avg of Overall Tests (last 5)',
               data: avg5Line,
               borderColor: 'orange',
               backgroundColor: 'orange',
@@ -249,7 +325,7 @@
           plugins: {
             title: {
               display: true,
-              text: 'Avg WPM of 10 Slowest Words per Test'
+              text: 'WPM Performance Over Time'
             }
           },
           scales: {
@@ -259,6 +335,74 @@
         }
       });
     }
+
+    function renderWordsScatterChart() {
+      const entries = Object.entries(wordStats).map(([word, data]) => {
+        const last5 = data.last5 || [];
+        const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : 0;
+        return { word, avg5 };
+      });
+
+      // Sort entries by avg5 (slowest to fastest)
+      entries.sort((a, b) => a.avg5 - b.avg5);
+
+      // Create data points where X is the index and Y is the WPM
+      const dataPoints = entries.map((entry, index) => ({
+        x: index + 1,
+        y: entry.avg5
+      }));
+
+      const ctx = document.getElementById("wordsScatterChart").getContext("2d");
+      new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Words by WPM (Slowest to Fastest)',
+            data: dataPoints,
+            backgroundColor: dataPoints.map((_, index) =>
+              index < 10 ? 'rgba(255, 99, 132, 1)' : 'rgba(54, 162, 235, 0.5)'
+            ),
+            pointRadius: 6,
+            pointHoverRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Words Ranked by Speed (Slowest to Fastest)'
+            },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  return `Word #${context.parsed.x}: ${context.parsed.y.toFixed(1)} WPM`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Word Rank'
+              },
+              ticks: {
+                stepSize: 1
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'WPM (Avg Last 5)'
+              },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
     function startTest() {
       testWords = getTestWords();
       currentIndex = 0;
@@ -269,6 +413,7 @@
       renderWords();
       renderStats();
       renderChart();
+      renderWordsScatterChart();
       document.getElementById("input").focus();
     }
 
@@ -277,12 +422,30 @@
       const duration = (now - startTime) / 1000 / 60;
       const wpm = 1 / duration;
 
-      if (!wordStats[word]) wordStats[word] = { avg: wpm, last: wpm, last5: [wpm] };
-      else {
+      if (!wordStats[word]) {
+        wordStats[word] = {
+          avg: wpm,
+          last: wpm,
+          last5: [wpm],
+          count: 1  // Initialize count to 1 for new words
+        };
+      } else {
         wordStats[word].avg = (wordStats[word].avg * 0.8 + wpm * 0.2);
         wordStats[word].last = wpm;
         wordStats[word].last5 = (wordStats[word].last5 || []).slice(-4).concat(wpm);
+        wordStats[word].count = (wordStats[word].count || 0) + 1; // Increment count
       }
+
+      // Update slowestWords list immediately after each word is typed
+      slowestWords = Object.entries(wordStats)
+        .map(([word, stats]) => {
+          const last5 = stats.last5 || [];
+          const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : Infinity;
+          return { word, avg5 };
+        })
+        .sort((a, b) => a.avg5 - b.avg5)
+        .slice(0, 10)
+        .map(e => e.word);
 
       saveStatsToStorage();
       history.push({ word, wpm });
@@ -291,6 +454,7 @@
     }
 
     function showResults() {
+      // Calculate the average WPM of the 10 slowest words
       const entries = Object.entries(wordStats).map(([word, data]) => {
         const last5 = data.last5 || [];
         const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : Infinity;
@@ -298,15 +462,39 @@
       });
       const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
       const avgOf10 = slow10.length ? (slow10.map(e => e.avg5).reduce((a, b) => a + b, 0) / slow10.length) : 0;
+
+      // Save the average WPM of 10 slowest words for the chart
       if (!isNaN(avgOf10)) {
         slow10WPMHistory.push(parseFloat(avgOf10.toFixed(1)));
-        saveStatsToStorage();
       }
 
+      // Calculate overall WPM for the whole test
       const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
       const overallWPM = testWords.length / totalTimeMin;
+
+      // Save the overall WPM for the chart
+      testWPMHistory.push(parseFloat(overallWPM.toFixed(1)));
+
+      // Calculate average of all overall test WPMs
+      const avgTestWPM = testWPMHistory.length
+        ? (testWPMHistory.reduce((a, b) => a + b, 0) / testWPMHistory.length).toFixed(1)
+        : "-";
+
+      saveStatsToStorage();
+
+      // Display the three metrics under the test
       const resultsDiv = document.getElementById("results");
-      resultsDiv.innerHTML = `<h2>Results</h2><p>Overall WPM: ${overallWPM.toFixed(1)}</p>`;
+      resultsDiv.innerHTML = `
+        <h2>Results</h2>
+        <div class="global-stats">
+          <div><strong>Last Test WPM:</strong> ${overallWPM.toFixed(1)}</div>
+          <div><strong>Average WPM:</strong> ${avgTestWPM}</div>
+          <div><strong>Slowest 10 Words WPM:</strong> ${avgOf10.toFixed(1)}</div>
+        </div>
+      `;
+
+      renderChart();
+      renderWordsScatterChart();
     }
 
     document.getElementById("input").addEventListener("input", function () {
@@ -349,12 +537,12 @@
 
     function toggleTheme() {
       const dark = document.body.classList.toggle("dark");
-      document.cookie = `theme=${dark ? 'dark' : 'light'}; path=/; max-age=31536000`;
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
     }
 
     function loadTheme() {
-      const match = document.cookie.match(/theme=(dark|light)/);
-      if (match && match[1] === "dark") {
+      const theme = localStorage.getItem('theme');
+      if (theme === "dark") {
         document.body.classList.add("dark");
       }
     }
@@ -364,7 +552,12 @@
     fetch('https://raw.githubusercontent.com/SMenigat/thousand-most-common-words/master/words/en.json')
       .then(res => res.json())
       .then(data => {
-        english1k = data.words.map(w => w.englishWord).filter(w => w);
+        // Clean up apostrophes in words
+        english1k = data.words
+          .map(w => w.englishWord)
+          .filter(w => w)
+          .map(word => word.replace(/[''′`´]/g, "'"));
+
         loadStatsFromStorage();
         startTest();
       });
