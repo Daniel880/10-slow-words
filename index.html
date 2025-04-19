@@ -163,7 +163,7 @@
       `;
     }
 
-    // Fix the input event handler for the last word issue
+    // Update the input handler to refresh charts after test completion
     document.getElementById("input").addEventListener("input", function (e) {
       const typed = this.value.trim();
       const expected = testWords[currentIndex];
@@ -230,6 +230,8 @@
           saveStatsToStorage();
           updateResultsDisplay();
           renderStats();
+          renderChart();          // Add this to update line chart
+          renderWordsScatterChart(); // Add this to update scatter chart
 
           // Clear input field immediately
           inputEl.value = "";
@@ -458,6 +460,7 @@
       });
     }
 
+    // Update the line chart to display average values directly on lines
     function renderChart() {
       // Make sure we have data to show
       if (testWPMHistory.length === 0) return;
@@ -469,6 +472,12 @@
         avg5Line.push(slice.reduce((a, b) => a + b, 0) / slice.length);
       }
 
+      // Get the latest values for display
+      const lastSlow10Avg = slow10WPMHistory.length > 0 ?
+        slow10WPMHistory[slow10WPMHistory.length - 1].toFixed(1) : "0.0";
+      const lastAvg5 = avg5Line.length > 0 ?
+        avg5Line[avg5Line.length - 1].toFixed(1) : "0.0";
+
       const ctx = document.getElementById("wpmChart").getContext("2d");
       if (chart) chart.destroy();
       chart = new Chart(ctx, {
@@ -477,7 +486,7 @@
           labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
           datasets: [
             {
-              label: 'Avg WPM of 10 Slowest Words',
+              label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
               data: slow10WPMHistory,
               borderColor: 'blue',
               backgroundColor: 'blue',
@@ -486,7 +495,7 @@
               pointRadius: 4
             },
             {
-              label: 'Rolling Avg of Overall Tests (last 5)',
+              label: `Rolling Avg of Overall Tests: ${lastAvg5} WPM`,
               data: avg5Line,
               borderColor: 'orange',
               backgroundColor: 'orange',
@@ -502,6 +511,17 @@
             title: {
               display: true,
               text: 'WPM Performance Over Time'
+            },
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                boxWidth: 15,
+                padding: 15,
+                font: {
+                  weight: 'bold'
+                }
+              }
             }
           },
           scales: {
@@ -512,6 +532,7 @@
       });
     }
 
+    // Update the scatter chart to display average values directly on lines
     function renderWordsScatterChart() {
       const entries = Object.entries(wordStats).map(([word, data]) => {
         const last5 = data.last5 || [];
@@ -560,7 +581,7 @@
               pointHoverRadius: 8
             },
             {
-              label: 'Average WPM (All Words)',
+              label: `Average WPM (All Words): ${allWordsAvg.toFixed(1)} WPM`,
               data: Array(dataPoints.length).fill().map((_, i) => ({
                 x: i + 1,
                 y: allWordsAvg
@@ -573,7 +594,7 @@
               borderDash: [5, 5]
             },
             {
-              label: 'Average WPM (10 Slowest Words)',
+              label: `Average WPM (10 Slowest Words): ${slow10Avg.toFixed(1)} WPM`,
               data: Array(dataPoints.length).fill().map((_, i) => ({
                 x: i + 1,
                 y: slow10Avg
@@ -604,6 +625,17 @@
                   } else {
                     return `Average WPM (10 Slowest Words): ${slow10Avg.toFixed(1)}`;
                   }
+                }
+              }
+            },
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                boxWidth: 15,
+                padding: 15,
+                font: {
+                  weight: 'bold'
                 }
               }
             }
