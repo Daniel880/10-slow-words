@@ -742,8 +742,7 @@
         english1k = data.words
           .map(w => w.englishWord)
           .filter(w => w)
-          .map(word => word.replace(/[''′`´]/g, "'"));
-
+          .map(word => word.replace(/’/g, "'"));
         loadStatsFromStorage();
         startTest();
       });
