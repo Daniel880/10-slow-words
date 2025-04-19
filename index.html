@@ -163,7 +163,7 @@
       `;
     }
 
-    // Update the input handler to refresh charts after test completion
+    // Fix combined functions to ensure test reloads properly
     document.getElementById("input").addEventListener("input", function (e) {
       const typed = this.value.trim();
       const expected = testWords[currentIndex];
@@ -228,16 +228,30 @@
 
           // Save and update UI
           saveStatsToStorage();
-          updateResultsDisplay();
-          renderStats();
-          renderChart();          // Add this to update line chart
-          renderWordsScatterChart(); // Add this to update scatter chart
 
           // Clear input field immediately
           inputEl.value = "";
 
-          // Start the new test IMMEDIATELY without any delay
-          startTest();
+          try {
+            // Update results and stats before starting new test
+            updateResultsDisplay();
+            renderStats();
+
+            // Separate try/catch for charts to ensure test continues even if charts fail
+            try {
+              renderChart();
+              renderWordsScatterChart();
+            } catch (chartErr) {
+              console.error("Chart error:", chartErr);
+            }
+
+            // Start the new test IMMEDIATELY without any delay
+            startTest();
+          } catch (err) {
+            console.error("Error during test completion:", err);
+            // Fallback to restart test if any error occurs
+            startTest();
+          }
         }
       } else if (currentWordEl) {
         currentWordEl.classList.add("incorrect");
@@ -479,57 +493,61 @@
         avg5Line[avg5Line.length - 1].toFixed(1) : "0.0";
 
       const ctx = document.getElementById("wpmChart").getContext("2d");
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
-          datasets: [
-            {
-              label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
-              data: slow10WPMHistory,
-              borderColor: 'blue',
-              backgroundColor: 'blue',
-              fill: false,
-              tension: 0.3,
-              pointRadius: 4
-            },
-            {
-              label: `Rolling Avg of Overall Tests: ${lastAvg5} WPM`,
-              data: avg5Line,
-              borderColor: 'orange',
-              backgroundColor: 'orange',
-              fill: false,
-              borderDash: [5, 5],
-              tension: 0.3,
-              pointRadius: 4
-            }
-          ]
-        },
-        options: {
-          plugins: {
-            title: {
-              display: true,
-              text: 'WPM Performance Over Time'
-            },
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                boxWidth: 15,
-                padding: 15,
-                font: {
-                  weight: 'bold'
+      try {
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
+            datasets: [
+              {
+                label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
+                data: slow10WPMHistory,
+                borderColor: 'blue',
+                backgroundColor: 'blue',
+                fill: false,
+                tension: 0.3,
+                pointRadius: 4
+              },
+              {
+                label: `Rolling Avg of Overall Tests: ${lastAvg5} WPM`,
+                data: avg5Line,
+                borderColor: 'orange',
+                backgroundColor: 'orange',
+                fill: false,
+                borderDash: [5, 5],
+                tension: 0.3,
+                pointRadius: 4
+              }
+            ]
+          },
+          options: {
+            plugins: {
+              title: {
+                display: true,
+                text: 'WPM Performance Over Time'
+              },
+              legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                  boxWidth: 15,
+                  padding: 15,
+                  font: {
+                    weight: 'bold'
+                  }
                 }
               }
+            },
+            scales: {
+              x: { title: { display: true, text: 'Test #' } },
+              y: { title: { display: true, text: 'WPM' }, beginAtZero: true }
             }
-          },
-          scales: {
-            x: { title: { display: true, text: 'Test #' } },
-            y: { title: { display: true, text: 'WPM' }, beginAtZero: true }
           }
-        }
-      });
+        });
+      } catch (err) {
+        console.error("Error rendering chart:", err);
+      }
     }
 
     // Update the scatter chart to display average values directly on lines
