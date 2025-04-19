@@ -694,7 +694,8 @@
     function handleCorrectWord(word) {
       const now = performance.now();
       const duration = (now - startTime) / 1000 / 60;
-      const wpm = 1 / duration;
+      const wordLetterCount = word.length;
+      const wpm = (wordLetterCount / 5) / duration; // Calculate WPM based on letter count
 
       if (!wordStats[word]) {
         wordStats[word] = {
@@ -768,4 +769,3 @@
 </body>
 
 </html>
-```
