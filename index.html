@@ -286,8 +286,19 @@
         } else {
           renderWords();
         }
-      } else if (!wordStartTime) {
-        // Rozpocznij czas dla aktualnego słowa przy pierwszym naciśnięciu klawisza
+      } else if (!wordStartTime &&
+        // Ignoruj klawisze modyfikujące i specjalne
+        !e.key.startsWith('Shift') &&
+        !e.key.startsWith('Control') &&
+        !e.key.startsWith('Alt') &&
+        !e.key.startsWith('Meta') &&
+        !e.key.startsWith('Arrow') &&
+        !e.key.startsWith('Tab') &&
+        !e.key.startsWith('Caps') &&
+        !e.key.startsWith('Escape') &&
+        !e.key.startsWith('F') && // Klawisze funkcyjne F1-F12
+        e.key.length === 1) { // Tylko pojedyncze znaki, nie specjalne klawisze
+        // Rozpocznij czas dla aktualnego słowa przy pierwszym naciśnięciu klawisza znakowego
         wordStartTime = performance.now();
       }
     });
