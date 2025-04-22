@@ -100,6 +100,41 @@
       font-size: 1.2em;
       margin-bottom: 10px;
     }
+
+    .word-tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 10px;
+      z-index: 1000;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      display: none;
+      width: 1100px;
+      /* Fixed width instead of max-width */
+      height: 450px;
+      /* Fixed height instead of max-height */
+      overflow: visible;
+    }
+
+    .dark .word-tooltip {
+      background: #222;
+      border-color: #444;
+      color: #fff;
+    }
+
+    .tooltip-canvas {
+      width: 100% !important;
+      /* Force width with !important */
+      height: 400px !important;
+      /* Force height with !important */
+      display: block;
+    }
+
+    .word-cell {
+      cursor: pointer;
+      text-decoration: underline dotted;
+    }
   </style>
 </head>
 
@@ -164,6 +199,118 @@
           <div><strong>Slowest 10 Words WPM:</strong> ${avgOf10.toFixed(1)}</div>
         </div>
       `;
+    }
+
+    // Dodaj tę funkcję w sekcji skryptów
+    function generateWordProgressChart(word) {
+      const data = wordStats[word];
+      console.log('Generating chart for:', word, data);
+
+      if (!data || !data.last5 || data.last5.length === 0) {
+        console.log('No data for word:', word);
+        return false;
+      }
+
+      // Make sure we have a tooltip div with a canvas
+      const tooltipDiv = document.getElementById('wordTooltip');
+      if (!tooltipDiv) {
+        console.error('Tooltip div not found!');
+        return false;
+      }
+
+      // Clear previous content and add canvas if needed
+      tooltipDiv.innerHTML = `
+        <p>Progress for word "${word}"</p>
+        <canvas id="tooltipChart" class="tooltip-canvas"></canvas>
+      `;
+
+      const canvas = document.getElementById('tooltipChart');
+      if (!canvas) {
+        console.error('Chart canvas element not found!');
+        return false;
+      }
+
+      const ctx = canvas.getContext('2d');
+
+      // Safely destroy existing chart if it exists and is a Chart instance
+      if (window.tooltipChart && typeof window.tooltipChart.destroy === 'function') {
+        window.tooltipChart.destroy();
+      }
+
+      // Przygotuj dane do wykresu - THIS WAS MISSING!
+      const chartData = data.last5;
+      const labels = chartData.map((_, i) => `Attempt #${i + 1}`);
+
+      // Oblicz trend
+      const avgWPM = chartData.reduce((a, b) => a + b, 0) / chartData.length;
+
+      // Generuj nowy wykres
+      window.tooltipChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'WPM',
+            data: chartData,
+            borderColor: document.body.classList.contains('dark') ? 'rgb(75, 192, 255)' : 'rgb(75, 192, 192)',
+            backgroundColor: document.body.classList.contains('dark') ? 'rgba(75, 192, 255, 0.2)' : 'rgba(75, 192, 192, 0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false, /* Change to false to respect container height */
+          layout: {
+            padding: {
+              left: 20,
+              right: 30,
+              top: 30,
+              bottom: 20
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: `Progress for word "${word}" (Avg: ${avgWPM.toFixed(1)} WPM)`,
+              font: {
+                size: 18
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  return `WPM: ${context.parsed.y.toFixed(1)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              title: {
+                display: true,
+                text: 'WPM',
+                font: {
+                  size: 14
+                }
+              },
+              suggestedMin: Math.max(0, avgWPM * 0.5),
+              suggestedMax: avgWPM * 1.5
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Attempts',
+                font: {
+                  size: 14
+                }
+              }
+            }
+          }
+        }
+      });
+
+      return true;
     }
 
     // Fix combined functions to ensure test reloads properly
@@ -391,6 +538,16 @@
       renderWordsScatterChart();
       updateResultsDisplay(); // Show statistics immediately
       document.getElementById("input").focus();
+
+      // Dodaj dane testowe
+      if (Object.keys(wordStats).length === 0) {
+        wordStats["test"] = {
+          avg: 50,
+          last: 55,
+          last5: [40, 45, 50, 55, 60],
+          count: 5
+        };
+      }
     }
 
     // Call updateResultsDisplay after loading stats
@@ -453,6 +610,7 @@
       }).join(" ");
     }
 
+    // Zmodyfikuj funkcję renderStats()
     function renderStats() {
       const statsDiv = document.getElementById("stats");
       const entries = Object.entries(wordStats).map(([word, data]) => {
@@ -517,7 +675,7 @@
         const rowClass = idx < 10 ? 'highlight' : '';
         html += `<tr class="${rowClass}">
           <td>${idx + 1}</td>
-          <td>${entry.word}</td>
+          <td class="word-cell" data-word="${entry.word}">${entry.word}</td>
           <td>${entry.count}</td>
           <td>${entry.avg5.toFixed(1)}</td>
           <td>${entry.avg.toFixed(1)}</td>
@@ -542,6 +700,38 @@
           }
 
           renderStats();
+        });
+      });
+
+      // Dodaj obsługę tooltipów
+      const tooltipDiv = document.getElementById("wordTooltip");
+      if (!tooltipDiv) {
+        console.error("Tooltip div not found!");
+        return;
+      }
+
+      document.querySelectorAll('.word-cell').forEach(cell => {
+        const word = cell.getAttribute('data-word');
+
+        cell.addEventListener('mouseenter', (e) => {
+          console.log('Mouse entered cell for word:', word);
+          const result = generateWordProgressChart(word);
+          if (result) {
+            tooltipDiv.style.display = 'block';
+            tooltipDiv.style.left = `${e.pageX + 15}px`;
+            tooltipDiv.style.top = `${e.pageY + 15}px`;
+          } else {
+            console.log('No chart data available for word:', word);
+          }
+        });
+
+        cell.addEventListener('mouseleave', () => {
+          tooltipDiv.style.display = 'none';
+        });
+
+        cell.addEventListener('mousemove', (e) => {
+          tooltipDiv.style.left = `${e.pageX + 15}px`;
+          tooltipDiv.style.top = `${e.pageY + 15}px`;
         });
       });
     }
@@ -795,6 +985,8 @@
         startTest();
       });
   </script>
+  <div id="wordTooltip" class="word-tooltip"></div>
 </body>
 
 </html>
+````
