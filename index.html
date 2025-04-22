@@ -176,6 +176,27 @@
         { primary: 'rgb(75, 192, 192)', primaryAlpha: 'rgba(75, 192, 192, 0.2)' }
     };
 
+    // Add a helper function to store all history for each word
+    function updateWordStats(word, wpm) {
+      if (!wordStats[word]) {
+        wordStats[word] = {
+          avg: wpm,
+          last: wpm,
+          last5: [wpm],
+          allHistory: [wpm], // New array to store all attempts
+          count: 1
+        };
+      } else {
+        wordStats[word].avg = (wordStats[word].avg * 0.8 + wpm * 0.2);
+        wordStats[word].last = wpm;
+        wordStats[word].last5 = (wordStats[word].last5 || []).slice(-4).concat(wpm);
+        // Add to the full history array
+        if (!wordStats[word].allHistory) wordStats[word].allHistory = [];
+        wordStats[word].allHistory.push(wpm);
+        wordStats[word].count = (wordStats[word].count || 0) + 1;
+      }
+    }
+
     function updateResultsDisplay() {
       const entries = Object.entries(wordStats).map(([word, data]) => {
         const last5 = data.last5 || [];
@@ -205,12 +226,21 @@
       `;
     }
 
+    // Update the chart generation function to use full history
     function generateWordProgressChart(word) {
       const data = wordStats[word];
       console.log('Generating chart for:', word, data);
 
-      if (!data || !data.last5 || data.last5.length === 0) {
+      if (!data) {
         console.log('No data for word:', word);
+        return false;
+      }
+
+      // Use all history if available, otherwise fall back to last5
+      const chartData = data.allHistory || data.last5;
+
+      if (!chartData || chartData.length === 0) {
+        console.log('No chart data available for word:', word);
         return false;
       }
 
@@ -221,7 +251,7 @@
       }
 
       tooltipDiv.innerHTML = `
-        <p>Progress for word "${word}"</p>
+        <p>Progress for word "${word}" (${chartData.length} attempts)</p>
         <canvas id="tooltipChart" class="tooltip-canvas"></canvas>
       `;
 
@@ -237,23 +267,68 @@
         window.tooltipChart.destroy();
       }
 
-      const chartData = data.last5;
       const labels = chartData.map((_, i) => `Attempt #${i + 1}`);
       const avgWPM = utils.calculateAverage(chartData);
       const colors = utils.getColorScheme();
+
+      // Calculate trend line values
+      const trendValues = [];
+      if (chartData.length > 1) {
+        // Simple linear regression
+        const xValues = Array.from({ length: chartData.length }, (_, i) => i + 1);
+        const xMean = utils.calculateAverage(xValues);
+        const yMean = avgWPM;
+
+        let numerator = 0;
+        let denominator = 0;
+
+        for (let i = 0; i < chartData.length; i++) {
+          numerator += (xValues[i] - xMean) * (chartData[i] - yMean);
+          denominator += Math.pow(xValues[i] - xMean, 2);
+        }
+
+        const slope = denominator ? numerator / denominator : 0;
+        const intercept = yMean - (slope * xMean);
+
+        // Generate the trend line data points
+        for (let i = 0; i < chartData.length; i++) {
+          trendValues.push(slope * (i + 1) + intercept);
+        }
+      }
+
+      // Get first and last values for displaying improvement
+      let improvement = "";
+      if (chartData.length > 1) {
+        const first = chartData[0];
+        const last = chartData[chartData.length - 1];
+        const changePercent = ((last - first) / first * 100).toFixed(1);
+        improvement = ` (${changePercent > 0 ? '+' : ''}${changePercent}% from first attempt)`;
+      }
 
       window.tooltipChart = new Chart(ctx, {
         type: 'line',
         data: {
           labels: labels,
-          datasets: [{
-            label: 'WPM',
-            data: chartData,
-            borderColor: colors.primary,
-            backgroundColor: colors.primaryAlpha,
-            fill: true,
-            tension: 0.3
-          }]
+          datasets: [
+            {
+              label: 'WPM',
+              data: chartData,
+              borderColor: colors.primary,
+              backgroundColor: colors.primaryAlpha,
+              fill: true,
+              tension: 0.3
+            },
+            // Add trend line if we have more than one data point
+            ...(chartData.length > 1 ? [{
+              label: 'Trend',
+              data: trendValues,
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              fill: false,
+              pointRadius: 0
+            }] : [])
+          ]
         },
         options: {
           responsive: true,
@@ -269,7 +344,7 @@
           plugins: {
             title: {
               display: true,
-              text: `Progress for word "${word}" (Avg: ${utils.formatNumber(avgWPM)} WPM)`,
+              text: `Progress for "${word}" (Avg: ${utils.formatNumber(avgWPM)} WPM)${improvement}`,
               font: {
                 size: 18
               }
@@ -340,19 +415,8 @@
             const wordLetterCount = lastWord.length + 1;
             const wpm = (wordLetterCount / 5) / duration;
 
-            if (!wordStats[lastWord]) {
-              wordStats[lastWord] = {
-                avg: wpm,
-                last: wpm,
-                last5: [wpm],
-                count: 1
-              };
-            } else {
-              wordStats[lastWord].avg = (wordStats[lastWord].avg * 0.8 + wpm * 0.2);
-              wordStats[lastWord].last = wpm;
-              wordStats[lastWord].last5 = (wordStats[lastWord].last5 || []).slice(-4).concat(wpm);
-              wordStats[lastWord].count = (wordStats[lastWord].count || 0) + 1;
-            }
+            // Replace direct wordStats update with new helper function
+            updateWordStats(lastWord, wpm);
           }
 
           const totalCharCount = testWords.reduce((sum, word) => sum + word.length, 0);
@@ -441,19 +505,8 @@
       const wordLetterCount = word.length + 1;
       const wpm = (wordLetterCount / 5) / duration;
 
-      if (!wordStats[word]) {
-        wordStats[word] = {
-          avg: wpm,
-          last: wpm,
-          last5: [wpm],
-          count: 1
-        };
-      } else {
-        wordStats[word].avg = (wordStats[word].avg * 0.8 + wpm * 0.2);
-        wordStats[word].last = wpm;
-        wordStats[word].last5 = (wordStats[word].last5 || []).slice(-4).concat(wpm);
-        wordStats[word].count = (wordStats[word].count || 0) + 1;
-      }
+      // Replace the direct wordStats update with the new helper function
+      updateWordStats(word, wpm);
 
       slowestWords = Object.entries(wordStats)
         .map(([word, stats]) => {
