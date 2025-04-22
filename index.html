@@ -128,6 +128,7 @@
     let scatterChart; // Dodaj tę zmienną do śledzenia wykresu rozproszenia
     let slow10WPMHistory = [];
     let testWPMHistory = [];
+    let wordStartTime = null; // Czas rozpoczęcia pisania aktualnego słowa
 
     // Add these variables at the top to track sorting
     let currentSortColumn = 'avg5'; // Default sort by Avg Last 5
@@ -189,25 +190,31 @@
           currentIndex++;
           renderWords(); // Update UI to show the last word as green
 
-          // Handle completion immediately without delay
-          // Force completion of the last word using the stored lastWord variable
+          // Handle completion using the same logic as other words
           const now = performance.now();
-          const duration = (now - startTime) / 1000 / 60;
-          const wpm = 1 / duration;
 
-          // Update word stats for the last word
-          if (!wordStats[lastWord]) {
-            wordStats[lastWord] = {
-              avg: wpm,
-              last: wpm,
-              last5: [wpm],
-              count: 1
-            };
-          } else {
-            wordStats[lastWord].avg = (wordStats[lastWord].avg * 0.8 + wpm * 0.2);
-            wordStats[lastWord].last = wpm;
-            wordStats[lastWord].last5 = (wordStats[lastWord].last5 || []).slice(-4).concat(wpm);
-            wordStats[lastWord].count = (wordStats[lastWord].count || 0) + 1;
+          if (wordStartTime) {
+            const duration = (now - wordStartTime) / 1000 / 60; // czas w minutach
+            wordStartTime = null; // Reset for next word
+
+            // Calculate WPM the same way as in handleCorrectWord
+            const wordLetterCount = lastWord.length + 1; // Include space
+            const wpm = (wordLetterCount / 5) / duration;
+
+            // Update word stats for the last word - TYLKO RAZ!
+            if (!wordStats[lastWord]) {
+              wordStats[lastWord] = {
+                avg: wpm,
+                last: wpm,
+                last5: [wpm],
+                count: 1
+              };
+            } else {
+              wordStats[lastWord].avg = (wordStats[lastWord].avg * 0.8 + wpm * 0.2);
+              wordStats[lastWord].last = wpm;
+              wordStats[lastWord].last5 = (wordStats[lastWord].last5 || []).slice(-4).concat(wpm);
+              wordStats[lastWord].count = (wordStats[lastWord].count || 0) + 1;
+            }
           }
 
           // Calculate overall stats
@@ -269,16 +276,64 @@
         const expected = testWords[currentIndex];
 
         if (!expected || word !== expected) return;
-        if (currentIndex === testWords.length - 1) return; // Don't handle last word with space
 
         handleCorrectWord(expected);
         this.value = "";
-        renderWords();
-      } else if (e.key === "Escape" || e.key === "Tab") {
-        e.preventDefault();
-        startTest();
+
+        // Jeśli to ostatnie słowo, zakończ test
+        if (currentIndex === testWords.length) {
+          showResults();
+        } else {
+          renderWords();
+        }
+      } else if (!wordStartTime) {
+        // Rozpocznij czas dla aktualnego słowa przy pierwszym naciśnięciu klawisza
+        wordStartTime = performance.now();
       }
     });
+
+    function handleCorrectWord(word) {
+      const now = performance.now();
+
+      if (!wordStartTime) return; // Jeśli czas nie został ustawiony, pomiń
+
+      const duration = (now - wordStartTime) / 1000 / 60; // czas w minutach
+      wordStartTime = null; // Zresetuj czas dla następnego słowa
+
+      // Oblicz WPM przy użyciu liczby znaków / 5
+      const wordLetterCount = word.length + 1; // Uwzględnij spację
+      const wpm = (wordLetterCount / 5) / duration;
+
+      if (!wordStats[word]) {
+        wordStats[word] = {
+          avg: wpm,
+          last: wpm,
+          last5: [wpm],
+          count: 1
+        };
+      } else {
+        wordStats[word].avg = (wordStats[word].avg * 0.8 + wpm * 0.2);
+        wordStats[word].last = wpm;
+        wordStats[word].last5 = (wordStats[word].last5 || []).slice(-4).concat(wpm);
+        wordStats[word].count = (wordStats[word].count || 0) + 1;
+      }
+
+      // Aktualizuj listę najwolniejszych słów
+      slowestWords = Object.entries(wordStats)
+        .map(([word, stats]) => {
+          const last5 = stats.last5 || [];
+          const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : Infinity;
+          return { word, avg5 };
+        })
+        .sort((a, b) => a.avg5 - b.avg5)
+        .slice(0, 10)
+        .map(e => e.word);
+
+      saveStatsToStorage();
+      history.push({ word, wpm });
+      currentIndex++;
+      renderStats();
+    }
 
     // Remove the delayed restart from showResults since we handle it directly in the input handler
     function showResults() {
@@ -692,49 +747,6 @@
           }
         }
       });
-    }
-
-    // Update handleCorrectWord to refresh stats after each word
-    function handleCorrectWord(word) {
-      const now = performance.now();
-      const duration = (now - startTime) / 1000 / 60; // czas w minutach
-
-      // Oblicz WPM przy użyciu liczby znaków / 5
-      const wordLetterCount = word.length;
-      const wpm = (wordLetterCount / 5) / duration; // Calculate WPM based on letter count
-
-      if (!wordStats[word]) {
-        wordStats[word] = {
-          avg: wpm,
-          last: wpm,
-          last5: [wpm],
-          count: 1  // Initialize count to 1 for new words
-        };
-      } else {
-        wordStats[word].avg = (wordStats[word].avg * 0.8 + wpm * 0.2);
-        wordStats[word].last = wpm;
-        wordStats[word].last5 = (wordStats[word].last5 || []).slice(-4).concat(wpm);
-        wordStats[word].count = (wordStats[word].count || 0) + 1; // Increment count
-      }
-
-      // Update slowestWords list immediately after each word is typed
-      slowestWords = Object.entries(wordStats)
-        .map(([word, stats]) => {
-          const last5 = stats.last5 || [];
-          const avg5 = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : Infinity;
-          return { word, avg5 };
-        })
-        .sort((a, b) => a.avg5 - b.avg5)
-        .slice(0, 10)
-        .map(e => e.word);
-
-      saveStatsToStorage();
-      history.push({ word, wpm });
-      currentIndex++;
-      startTime = now;
-
-      // Add this line to refresh the stats table after each word
-      renderStats();
     }
 
     function toggleTheme() {
