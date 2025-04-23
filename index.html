@@ -444,7 +444,7 @@
         const timeDiff = currentTime - lastKeyTime;
 
         // Ignore outliers with time differences greater than 2 seconds
-        if (timeDiff <= 2000) {
+        if (timeDiff <= 5000) {
           const pair = `${lastKey}->${typed[typed.length - 1]}`;
 
           if (!pairTimings[pair]) {
