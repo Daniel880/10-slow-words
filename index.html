@@ -135,6 +135,23 @@
       cursor: pointer;
       text-decoration: underline dotted;
     }
+
+    /* Ensure table cells are square */
+    #confusionMatrix table {
+      table-layout: fixed;
+    }
+
+    #confusionMatrix th,
+    #confusionMatrix td {
+      width: 10px;
+      /* Set a fixed width */
+      height: 10px;
+      /* Set a fixed height */
+      text-align: center;
+      /* Center text */
+      vertical-align: middle;
+      /* Center text vertically */
+    }
   </style>
 </head>
 
@@ -149,6 +166,9 @@
   <button onclick="resetStats()">Reset All Stats</button>
   <button onclick="toggleTheme()">Toggle Dark Mode</button>
   <button onclick="refreshCharts()">Refresh Charts</button>
+  <button onclick="renderConfusionMatrix()">Show Confusion Matrix</button>
+  <div id="confusionMatrix"></div>
+  <div id="confusionMatrix"></div>
 
   <script>
     let english1k = [];
@@ -167,6 +187,17 @@
     let currentSortColumn = 'avg5';
     let currentSortDirection = 'asc';
 
+    let lastKey = null; // Tracks the last key pressed
+    let lastKeyTime = null; // Tracks the timestamp of the last key press
+
+    // Load pair timings from localStorage
+    let pairTimings = loadFromLocalStorage("pairTimings") || {};
+
+    // Save pair timings to localStorage
+    function savePairTimings() {
+      saveToLocalStorage("pairTimings", pairTimings);
+    }
+
     // Utility functions for repeated calculations
     const utils = {
       calculateAverage: (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0,
@@ -175,6 +206,16 @@
         { primary: 'rgb(75, 192, 255)', primaryAlpha: 'rgba(75, 192, 255, 0.2)' } :
         { primary: 'rgb(75, 192, 192)', primaryAlpha: 'rgba(75, 192, 192, 0.2)' }
     };
+
+    // Utility functions for localStorage
+    function saveToLocalStorage(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function loadFromLocalStorage(key) {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : null;
+    }
 
     // Add a helper function to store all history for each word
     function updateWordStats(word, wpm) {
@@ -388,78 +429,35 @@
     // Keep the same event handler implementations from your original code
     document.getElementById("input").addEventListener("input", function (e) {
       const typed = this.value.trim();
+      const currentTime = performance.now();
       const expected = testWords[currentIndex];
 
-      if (!testStartTime && typed.length > 0) {
-        testStartTime = performance.now();
-        startTime = testStartTime;
+      // Check for incorrect input
+      const wordListSpans = document.querySelectorAll("#wordList span");
+      if (expected && !expected.startsWith(typed)) {
+        wordListSpans[currentIndex].classList.add("incorrect");
+      } else {
+        wordListSpans[currentIndex].classList.remove("incorrect");
       }
 
-      const currentWordEl = document.querySelector(".current");
-      if (expected && expected.startsWith(typed)) {
-        currentWordEl?.classList.remove("incorrect");
+      if (lastKey && lastKeyTime) {
+        const timeDiff = currentTime - lastKeyTime;
+        const pair = `${lastKey}->${typed[typed.length - 1]}`;
 
-        if (currentIndex === testWords.length - 1 && typed === expected) {
-          const lastWord = expected;
-          const inputEl = this;
-
-          currentIndex++;
-          renderWords();
-
-          const now = performance.now();
-
-          if (wordStartTime) {
-            const duration = (now - wordStartTime) / 1000 / 60;
-            wordStartTime = null;
-
-            const wordLetterCount = lastWord.length + 1;
-            const wpm = (wordLetterCount / 5) / duration;
-
-            // Replace direct wordStats update with new helper function
-            updateWordStats(lastWord, wpm);
-          }
-
-          const totalCharCount = testWords.reduce((sum, word) => sum + word.length, 0);
-          const spacesCount = testWords.length - 1;
-          const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
-          const overallWPM = ((totalCharCount + spacesCount) / 5) / totalTimeMin;
-          testWPMHistory.push(parseFloat(overallWPM.toFixed(1)));
-
-          const entries = Object.entries(wordStats).map(([word, data]) => {
-            const last5 = data.last5 || [];
-            const avg5 = last5.length ? utils.calculateAverage(last5) : Infinity;
-            return { word, avg5 };
-          });
-
-          const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
-          const avgOf10 = slow10.length ? utils.calculateAverage(slow10.map(e => e.avg5)) : 0;
-          if (!isNaN(avgOf10)) {
-            slow10WPMHistory.push(parseFloat(avgOf10.toFixed(1)));
-          }
-
-          saveStatsToStorage();
-          inputEl.value = "";
-
-          try {
-            updateResultsDisplay();
-            renderStats();
-
-            try {
-              renderChart();
-              renderWordsScatterChart();
-            } catch (chartErr) {
-              console.error("Chart error:", chartErr);
-            }
-
-            startTest();
-          } catch (err) {
-            console.error("Error during test completion:", err);
-            startTest();
-          }
+        if (!pairTimings[pair]) {
+          pairTimings[pair] = { total: 0, count: 0, occurrences: [] };
         }
-      } else if (currentWordEl) {
-        currentWordEl.classList.add("incorrect");
+
+        pairTimings[pair].total += timeDiff;
+        pairTimings[pair].count += 1;
+        pairTimings[pair].occurrences.push(timeDiff);
+
+        // Save updated pair timings to localStorage
+        savePairTimings();
       }
+
+      lastKey = typed[typed.length - 1];
+      lastKeyTime = currentTime;
     });
 
     document.getElementById("input").addEventListener("keydown", function (e) {
@@ -475,6 +473,7 @@
 
         if (currentIndex === testWords.length) {
           showResults();
+          startTest(); // Reload the test after showing results
         } else {
           renderWords();
         }
@@ -505,7 +504,7 @@
       const wordLetterCount = word.length + 1;
       const wpm = (wordLetterCount / 5) / duration;
 
-      // Replace the direct wordStats update with the new helper function
+      // Zaktualizuj statystyki dla słowa
       updateWordStats(word, wpm);
 
       slowestWords = Object.entries(wordStats)
@@ -521,7 +520,13 @@
       saveStatsToStorage();
       history.push({ word, wpm });
       currentIndex++;
-      renderStats();
+
+      // Sprawdź, czy test się zakończył
+      if (currentIndex >= testWords.length) {
+        showResults();
+      } else {
+        renderWords();
+      }
     }
 
     function showResults() {
@@ -975,6 +980,47 @@
       }
     }
 
+    function renderConfusionMatrix() {
+      const matrixDiv = document.getElementById("confusionMatrix");
+      const letters = Array.from(new Set(Object.keys(pairTimings).flatMap(pair => pair.split("->")))).sort();
+
+      // Find the max time to normalize the color scale
+      let maxTime = 0;
+      for (const pair in pairTimings) {
+        const avgTime = pairTimings[pair].total / pairTimings[pair].count;
+        if (avgTime > maxTime) maxTime = avgTime;
+      }
+
+      let html = '<h2>Confusion Matrix (Time Between Letters)</h2><table><tr><th></th>';
+      letters.forEach(letter => html += `<th>${letter}</th>`);
+      html += '</tr>';
+
+      letters.forEach(rowLetter => {
+        html += `<tr><th>${rowLetter}</th>`;
+        letters.forEach(colLetter => {
+          const pair = `${rowLetter}->${colLetter}`;
+          const data = pairTimings[pair];
+          const avgTime = data ? (data.total / data.count).toFixed(1) : "-";
+          const count = data ? data.count : 0;
+
+          // Calculate color intensity (green for low times, red for high times)
+          let color = "#fff"; // Default white for no data
+          if (data) {
+            const intensity = avgTime / maxTime; // Normalize between 0 and 1
+            const red = Math.min(255, Math.floor(255 * intensity));
+            const green = Math.min(255, Math.floor(255 * (1 - intensity)));
+            color = `rgb(${red}, ${green}, 0)`;
+          }
+
+          html += `<td style="background-color: ${color};">${avgTime} (${count})</td>`;
+        });
+        html += '</tr>';
+      });
+
+      html += '</table>';
+      matrixDiv.innerHTML = html;
+    }
+
     loadTheme();
 
     fetch('https://raw.githubusercontent.com/SMenigat/thousand-most-common-words/master/words/en.json')
@@ -987,6 +1033,8 @@
         loadStatsFromStorage();
         startTest();
       });
+
+    window.addEventListener("beforeunload", savePairTimings);
   </script>
   <div id="wordTooltip" class="word-tooltip"></div>
 </body>
