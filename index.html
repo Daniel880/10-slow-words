@@ -987,7 +987,8 @@
       // Find the max time to normalize the color scale
       let maxTime = 0;
       for (const pair in pairTimings) {
-        const avgTime = pairTimings[pair].total / pairTimings[pair].count;
+        const last5 = pairTimings[pair].occurrences.slice(-5); // Get the last 5 occurrences
+        const avgTime = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : 0;
         if (avgTime > maxTime) maxTime = avgTime;
       }
 
@@ -1000,12 +1001,13 @@
         letters.forEach(colLetter => {
           const pair = `${rowLetter}->${colLetter}`;
           const data = pairTimings[pair];
-          const avgTime = data ? (data.total / data.count).toFixed(1) : "-";
+          const last5 = data ? data.occurrences.slice(-5) : []; // Get the last 5 occurrences
+          const avgTime = last5.length ? (last5.reduce((a, b) => a + b, 0) / last5.length).toFixed(1) : "-";
           const count = data ? data.count : 0;
 
           // Calculate color intensity (green for low times, red for high times)
           let color = "#fff"; // Default white for no data
-          if (data) {
+          if (data && last5.length) {
             const intensity = avgTime / maxTime; // Normalize between 0 and 1
             const red = Math.min(255, Math.floor(255 * intensity));
             const green = Math.min(255, Math.floor(255 * (1 - intensity)));
