@@ -440,7 +440,8 @@
         wordListSpans[currentIndex].classList.remove("incorrect");
       }
 
-      if (lastKey && lastKeyTime) {
+      // Only record transitions if the typed input matches the expected word so far
+      if (expected && expected.startsWith(typed) && lastKey && lastKeyTime) {
         const timeDiff = currentTime - lastKeyTime;
 
         // Ignore outliers with time differences greater than 2 seconds
