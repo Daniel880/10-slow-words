@@ -442,18 +442,22 @@
 
       if (lastKey && lastKeyTime) {
         const timeDiff = currentTime - lastKeyTime;
-        const pair = `${lastKey}->${typed[typed.length - 1]}`;
 
-        if (!pairTimings[pair]) {
-          pairTimings[pair] = { total: 0, count: 0, occurrences: [] };
+        // Ignore outliers with time differences greater than 2 seconds
+        if (timeDiff <= 2000) {
+          const pair = `${lastKey}->${typed[typed.length - 1]}`;
+
+          if (!pairTimings[pair]) {
+            pairTimings[pair] = { total: 0, count: 0, occurrences: [] };
+          }
+
+          pairTimings[pair].total += timeDiff;
+          pairTimings[pair].count += 1;
+          pairTimings[pair].occurrences.push(timeDiff);
+
+          // Save updated pair timings to localStorage
+          savePairTimings();
         }
-
-        pairTimings[pair].total += timeDiff;
-        pairTimings[pair].count += 1;
-        pairTimings[pair].occurrences.push(timeDiff);
-
-        // Save updated pair timings to localStorage
-        savePairTimings();
       }
 
       lastKey = typed[typed.length - 1];
