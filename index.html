@@ -992,9 +992,9 @@
       // Find the max time to normalize the color scale
       let maxTime = 0;
       for (const pair in pairTimings) {
-        const last5 = pairTimings[pair].occurrences.slice(-5); // Get the last 5 occurrences
-        const avgTime = last5.length ? last5.reduce((a, b) => a + b, 0) / last5.length : 0;
-        if (avgTime > maxTime) maxTime = avgTime;
+        const last10 = pairTimings[pair].occurrences.slice(-10); // Get the last 10 occurrences
+        const avgTime = last10.length ? last10.reduce((a, b) => a + b, 0) / last10.length : 0;
+        if (pairTimings[pair].count > 10 && avgTime > maxTime) maxTime = avgTime;
       }
 
       let html = '<h2>Confusion Matrix (Time Between Letters)</h2><table><tr><th></th>';
@@ -1006,13 +1006,13 @@
         letters.forEach(colLetter => {
           const pair = `${rowLetter}->${colLetter}`;
           const data = pairTimings[pair];
-          const last5 = data ? data.occurrences.slice(-5) : []; // Get the last 5 occurrences
-          const avgTime = last5.length ? (last5.reduce((a, b) => a + b, 0) / last5.length).toFixed(1) : "-";
+          const last10 = data ? data.occurrences.slice(-10) : []; // Get the last 10 occurrences
+          const avgTime = last10.length ? (last10.reduce((a, b) => a + b, 0) / last10.length).toFixed(1) : "-";
           const count = data ? data.count : 0;
 
-          // Calculate color intensity (green for low times, red for high times)
+          // Calculate color intensity only if there are more than 10 measurements
           let color = "#fff"; // Default white for no data
-          if (data && last5.length) {
+          if (data && count > 10 && last10.length) {
             const intensity = avgTime / maxTime; // Normalize between 0 and 1
             const red = Math.min(255, Math.floor(255 * intensity));
             const green = Math.min(255, Math.floor(255 * (1 - intensity)));
