@@ -509,7 +509,7 @@
       const wordLetterCount = word.length + 1;
       const wpm = (wordLetterCount / 5) / duration;
 
-      // Zaktualizuj statystyki dla słowa
+      // Update stats for the word
       updateWordStats(word, wpm);
 
       slowestWords = Object.entries(wordStats)
@@ -526,12 +526,15 @@
       history.push({ word, wpm });
       currentIndex++;
 
-      // Sprawdź, czy test się zakończył
+      // Check if the test is finished
       if (currentIndex >= testWords.length) {
         showResults();
       } else {
         renderWords();
       }
+
+      // Re-render the stats table after each word
+      renderStats();
     }
 
     function showResults() {
@@ -576,13 +579,9 @@
       updateResultsDisplay();
       document.getElementById("input").focus();
 
+      // Remove the "TEST" word initialization
       if (Object.keys(wordStats).length === 0) {
-        wordStats["test"] = {
-          avg: 50,
-          last: 55,
-          last5: [40, 45, 50, 55, 60],
-          count: 5
-        };
+        wordStats = {}; // Ensure stats are empty if no prior data exists
       }
     }
 
@@ -612,6 +611,7 @@
       wordStats = {};
       slow10WPMHistory = [];
       testWPMHistory = [];
+      pairTimings = {};
       saveStatsToStorage();
       startTest();
     }
