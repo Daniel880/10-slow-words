@@ -529,6 +529,7 @@
       // Check if the test is finished
       if (currentIndex >= testWords.length) {
         showResults();
+        startTest(); // Immediately reset the test
       } else {
         renderWords();
       }
