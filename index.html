@@ -5,9 +5,11 @@
   <meta charset="UTF-8" />
   <title>10 Slow Words</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     body {
-      font-family: sans-serif;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
       padding: 20px;
       background-color: #fff;
       color: #000;
@@ -20,6 +22,7 @@
 
     .word-list {
       margin-bottom: 20px;
+      font-family: 'JetBrains Mono', monospace;
       font-size: 3em;
     }
 
@@ -27,8 +30,14 @@
       margin-right: 5px;
     }
 
-    .current {
-      text-decoration: underline;
+    .current-word {
+      /* Highlighting for current word without underlining the entire word */
+    }
+
+    /* Remove spacing between characters in the current word */
+    .current-word span {
+      margin-right: 0;
+      letter-spacing: normal;
     }
 
     .correct {
@@ -41,6 +50,7 @@
 
     input {
       width: 100%;
+      font-family: 'JetBrains Mono', monospace;
       font-size: 3em;
       padding: 5px;
     }
@@ -58,6 +68,7 @@
       border-collapse: collapse;
       width: 100%;
       margin-top: 10px;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     th,
@@ -92,6 +103,7 @@
       margin-top: 10px;
       padding: 8px 16px;
       font-size: 1em;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .global-stats {
@@ -428,41 +440,38 @@
 
     // Keep the same event handler implementations from your original code
     document.getElementById("input").addEventListener("input", function (e) {
-      const typed = this.value.trim();
-      const currentTime = performance.now();
+      const typed = this.value;
       const expected = testWords[currentIndex];
-
-      // Check for incorrect input
       const wordListSpans = document.querySelectorAll("#wordList span");
-      if (expected && !expected.startsWith(typed)) {
-        wordListSpans[currentIndex].classList.add("incorrect");
-      } else {
-        wordListSpans[currentIndex].classList.remove("incorrect");
-      }
 
-      // Only record transitions if the typed input matches the expected word so far
-      if (expected && expected.startsWith(typed) && lastKey && lastKeyTime) {
-        const timeDiff = currentTime - lastKeyTime;
+      if (expected) {
+        // Zamień aktualny wyraz na litery z kolorowaniem
+        const currentSpan = wordListSpans[currentIndex];
+        // Only start replacing characters with underscores once typing begins
+        if (typed.length > 0) {
+          const coloredWord = expected
+            .split("")
+            .map((char, idx) => {
+              if (idx < typed.length) {
+                return `<span style="color: ${typed[idx] === char ? 'green' : 'red'};">${char}</span>`;
+              } else {
+                return "_"; // Use underscores instead of asterisks for untyped characters
+              }
+            })
+            .join("");
+          currentSpan.innerHTML = coloredWord;
+        } else {
+          // If no typing has started yet, show the full word
+          currentSpan.innerHTML = expected;
+        }
 
-        // Ignore outliers with time differences greater than 2 seconds
-        if (timeDiff <= 5000) {
-          const pair = `${lastKey}->${typed[typed.length - 1]}`;
-
-          if (!pairTimings[pair]) {
-            pairTimings[pair] = { total: 0, count: 0, occurrences: [] };
-          }
-
-          pairTimings[pair].total += timeDiff;
-          pairTimings[pair].count += 1;
-          pairTimings[pair].occurrences.push(timeDiff);
-
-          // Save updated pair timings to localStorage
-          savePairTimings();
+        // Oznacz wyraz jako niepoprawny, jeśli wpis jest błędny
+        if (!expected.startsWith(typed)) {
+          currentSpan.classList.add("incorrect");
+        } else {
+          currentSpan.classList.remove("incorrect");
         }
       }
-
-      lastKey = typed[typed.length - 1];
-      lastKeyTime = currentTime;
     });
 
     document.getElementById("input").addEventListener("keydown", function (e) {
@@ -639,10 +648,30 @@
       const container = document.getElementById("wordList");
       container.innerHTML = testWords.map((word, i) => {
         let cls = "";
-        if (i === currentIndex) cls = "current";
-        else if (i < currentIndex) cls = "correct";
-        if (slowestWords.includes(word)) cls += " highlight";
-        return `<span class="${cls}">${word}</span>`;
+        let displayWord = word; // Default to showing the full word
+
+        if (i === currentIndex) {
+          // Add current class for positioning but not for underlining
+          cls = "current-word"; // Changed from "current" to avoid global underline
+          const inputValue = document.getElementById("input").value;
+          // Only replace with underscores if typing has started
+          if (inputValue.length > 0) {
+            displayWord = word.split("").map((char, idx) => {
+              if (idx < inputValue.length) {
+                return `<span>${char}</span>`; // Show typed characters
+              } else {
+                return `<span style="text-decoration: underline;">_</span>`; // Show underscores for untyped characters
+              }
+            }).join("");
+          }
+          // If no typing has occurred, keep the full word visible
+        } else if (i < currentIndex) {
+          cls = "correct";
+        } else {
+          displayWord = "_".repeat(word.length); // Show underscores for future words
+        }
+
+        return `<span class="${cls}" data-index="${i}">${displayWord}</span>`;
       }).join(" ");
     }
 
