@@ -955,6 +955,19 @@
         const lastAvgWPM = testWPMHistory.length > 0 ?
           utils.formatNumber(testWPMHistory[testWPMHistory.length - 1]) : "0.0";
 
+        // Calculate moving average for slow10WPMHistory
+        const movingAvgWindowSize = 20; // Use a window of 3 points
+        const movingAvgSlow10 = slow10WPMHistory.map((val, idx, arr) => {
+          if (idx < movingAvgWindowSize - 1) {
+            // For the first few points where we don't have enough previous data
+            return null;
+          }
+
+          // Calculate average of last N values
+          const window = arr.slice(idx - (movingAvgWindowSize - 1), idx + 1);
+          return utils.calculateAverage(window);
+        });
+
         chart = new Chart(ctx, {
           type: 'line',
           data: {
@@ -968,6 +981,17 @@
                 fill: false,
                 tension: 0.3,
                 pointRadius: 4
+              },
+              {
+                label: `Moving Avg (${movingAvgWindowSize}) of 10 Slowest Words`,
+                data: movingAvgSlow10,
+                borderColor: 'rgba(75, 0, 130, 0.7)', // Indigo color
+                backgroundColor: 'rgba(75, 0, 130, 0.7)',
+                fill: false,
+                borderWidth: 2,
+                tension: 0.4,
+                pointRadius: 0, // No points, just the line
+                borderDash: [3, 3] // Dashed line
               },
               {
                 label: `Average WPM: ${lastAvgWPM} WPM`,
