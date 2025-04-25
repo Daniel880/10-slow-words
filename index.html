@@ -914,25 +914,26 @@
         return { word, avg5 };
       });
 
-      const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
+      // Sort entries to get the slowest words correctly
+      entries.sort((a, b) => a.avg5 - b.avg5);
+
+      const slow10 = entries.slice(0, 10);
       const avgOf10 = slow10.length ? utils.calculateAverage(slow10.map(e => e.avg5)) : 0;
 
-      const totalCharCount = testWords.reduce((sum, word) => sum + word.length, 0);
-      const spacesCount = testWords.length - 1;
+      // Calculate test duration and verify it's valid
       const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
-      const overallWPM = ((totalCharCount + spacesCount) / 5) / totalTimeMin;
 
-      // Only add to history if the test was completed
-      slow10WPMHistory.push(avgOf10);
-      // Instead of overallWPM, use the Average WPM from the stats (based on avg5 of all words)
-      const avgWPM = entries.length
-        ? utils.calculateAverage(entries.map(e => e.avg5).filter(avg => isFinite(avg)))
-        : 0;
-      testWPMHistory.push(avgWPM);
+      // Only add to history if the test has proper timing and we have data
+      if (totalTimeMin > 0 && testStartTime) {
+        slow10WPMHistory.push(avgOf10);
 
-      // Save immediately after adding new data points
-      saveStatsToStorage();
+        const avgWPM = entries.length
+          ? utils.calculateAverage(entries.map(e => e.avg5).filter(avg => isFinite(avg)))
+          : 0;
+        testWPMHistory.push(avgWPM);
 
+        saveStatsToStorage();
+      }
 
       updateResultsDisplay();
       renderChart();
@@ -947,13 +948,20 @@
       const ctx = document.getElementById("wpmChart").getContext("2d");
       try {
         if (chart) chart.destroy();
+
+        // Get the last values directly from the arrays, without recalculation
+        const lastSlow10Avg = slow10WPMHistory.length > 0 ?
+          utils.formatNumber(slow10WPMHistory[slow10WPMHistory.length - 1]) : "0.0";
+        const lastAvgWPM = testWPMHistory.length > 0 ?
+          utils.formatNumber(testWPMHistory[testWPMHistory.length - 1]) : "0.0";
+
         chart = new Chart(ctx, {
           type: 'line',
           data: {
             labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
             datasets: [
               {
-                label: `Avg WPM of 10 Slowest Words: ${utils.formatNumber(slow10WPMHistory[slow10WPMHistory.length - 1] || 0)} WPM`,
+                label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
                 data: slow10WPMHistory,
                 borderColor: 'blue',
                 backgroundColor: 'blue',
@@ -962,7 +970,7 @@
                 pointRadius: 4
               },
               {
-                label: `Average WPM: ${utils.formatNumber(testWPMHistory[testWPMHistory.length - 1] || 0)} WPM`,
+                label: `Average WPM: ${lastAvgWPM} WPM`,
                 data: testWPMHistory,
                 borderColor: 'orange',
                 backgroundColor: 'orange',
@@ -1015,7 +1023,7 @@
     function startTest() {
       testWords = getTestWords();
       currentIndex = 0;
-      testStartTime = null;
+      testStartTime = performance.now(); // Explicitly set start time immediately
       startTime = null;
       document.getElementById("input").value = "";
       const input = document.getElementById("input");
