@@ -942,38 +942,7 @@
     function renderChart() {
       if (testWPMHistory.length === 0) return;
 
-      // Calculate the same values that are shown in Statistics section
-      const entries = Object.entries(wordStats).map(([word, data]) => {
-        const last5 = data.last5 || [];
-        const avg5 = last5.length ? utils.calculateAverage(last5) : Infinity;
-        return { word, avg5 };
-      });
-
-      // Calculate average WPM based on avg5 from all words
-      const avgWPM = entries.length
-        ? utils.calculateAverage(entries.map(e => e.avg5).filter(avg => isFinite(avg)))
-        : 0;
-
-      // Calculate slowest 10 words WPM
-      const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
-      const avgOf10 = slow10.length ? utils.calculateAverage(slow10.map(e => e.avg5)) : 0;
-
-      // Create a rolling average line from test history
-      const avg5Line = [];
-      for (let i = 0; i < testWPMHistory.length; i++) {
-        if (i === testWPMHistory.length - 1) {
-          // For the last point, show the actual average from history
-          avg5Line.push(testWPMHistory[i]);
-        } else {
-          const slice = testWPMHistory.slice(Math.max(0, i - 4), i + 1);
-          avg5Line.push(utils.calculateAverage(slice));
-        }
-      }
-
-      const lastSlow10Avg = slow10WPMHistory.length > 0 ?
-        utils.formatNumber(slow10WPMHistory[slow10WPMHistory.length - 1]) : "0.0";
-      const lastAvg5 = avg5Line.length > 0 ?
-        utils.formatNumber(testWPMHistory[testWPMHistory.length - 1]) : "0.0";
+      // No need to manually calculate min/max - let Chart.js handle it automatically
 
       const ctx = document.getElementById("wpmChart").getContext("2d");
       try {
@@ -984,7 +953,7 @@
             labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
             datasets: [
               {
-                label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
+                label: `Avg WPM of 10 Slowest Words: ${utils.formatNumber(slow10WPMHistory[slow10WPMHistory.length - 1] || 0)} WPM`,
                 data: slow10WPMHistory,
                 borderColor: 'blue',
                 backgroundColor: 'blue',
@@ -993,8 +962,8 @@
                 pointRadius: 4
               },
               {
-                label: `Average WPM: ${lastAvg5} WPM`,
-                data: testWPMHistory, // Use full test history instead of rolling average
+                label: `Average WPM: ${utils.formatNumber(testWPMHistory[testWPMHistory.length - 1] || 0)} WPM`,
+                data: testWPMHistory,
                 borderColor: 'orange',
                 backgroundColor: 'orange',
                 fill: false,
@@ -1024,7 +993,16 @@
             },
             scales: {
               x: { title: { display: true, text: 'Test #' } },
-              y: { title: { display: true, text: 'WPM' }, beginAtZero: true }
+              y: {
+                title: { display: true, text: 'WPM' },
+                // Let Chart.js handle the axis bounds automatically
+                // Remove beginAtZero to avoid constraining the lower bound
+                // Add padding to give some space above and below the data points
+                ticks: {
+                  padding: 10
+                },
+                grace: '10%' // Add 10% padding to both ends of the axis
+              }
             }
           }
         });
