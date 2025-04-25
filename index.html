@@ -201,6 +201,7 @@
 
     let lastKey = null; // Tracks the last key pressed
     let lastKeyTime = null; // Tracks the timestamp of the last key press
+    let keyPressTimings = []; // To store timings between keypresses
 
     // Load pair timings from localStorage
     let pairTimings = loadFromLocalStorage("pairTimings") || {};
@@ -491,6 +492,17 @@
     document.getElementById("input").addEventListener("keydown", function (e) {
       if (e.key === " ") {
         e.preventDefault();
+
+        // Record the time for the space key if we've been tracking keystrokes
+        const now = performance.now();
+        if (lastKeyTime && this.value.trim() === testWords[currentIndex]) {
+          const timeBetweenKeys = now - lastKeyTime;
+          keyPressTimings.push({
+            key: "space",
+            timing: timeBetweenKeys
+          });
+        }
+
         const word = this.value.trim();
         const expected = testWords[currentIndex];
 
@@ -517,6 +529,30 @@
         !e.key.startsWith('F') &&
         e.key.length === 1) {
         wordStartTime = performance.now();
+        lastKeyTime = wordStartTime; // Initialize lastKeyTime with wordStartTime for first letter
+        keyPressTimings = []; // Reset timings for new word
+      } else if (
+        !e.key.startsWith('Shift') &&
+        !e.key.startsWith('Control') &&
+        !e.key.startsWith('Alt') &&
+        !e.key.startsWith('Meta') &&
+        !e.key.startsWith('Arrow') &&
+        !e.key.startsWith('Tab') &&
+        !e.key.startsWith('Caps') &&
+        !e.key.startsWith('Escape') &&
+        !e.key.startsWith('F') &&
+        e.key.length === 1
+      ) {
+        // Record time between keypresses
+        const now = performance.now();
+        if (lastKeyTime) {
+          const timeBetweenKeys = now - lastKeyTime;
+          keyPressTimings.push({
+            key: e.key,
+            timing: timeBetweenKeys
+          });
+        }
+        lastKeyTime = now;
       }
     });
 
@@ -531,6 +567,10 @@
 
       const wordLetterCount = word.length + 1;
       const wpm = (wordLetterCount / 5) / duration;
+
+      // Render the keystroke timing chart before updating other stats
+      renderKeystrokeTimingChart(word, wpm);
+      lastKeyTime = null; // Reset last key time
 
       // Update stats for the word
       updateWordStats(word, wpm);
@@ -560,6 +600,147 @@
       // Re-render the stats table and update statistics display after each word
       renderStats();
       updateResultsDisplay(); // Add this line to update the statistics after each word
+    }
+
+    function renderKeystrokeTimingChart(word, overallWPM) {
+      if (keyPressTimings.length === 0) return;
+
+      // Create a div for the chart if it doesn't exist
+      let chartDiv = document.getElementById("keystrokeChart");
+      if (!chartDiv) {
+        chartDiv = document.createElement("div");
+        chartDiv.id = "keystrokeChart";
+        chartDiv.style.marginTop = "20px";
+        chartDiv.style.marginBottom = "20px";
+
+        const canvas = document.createElement("canvas");
+        canvas.id = "keystrokeCanvas";
+        canvas.width = 800;
+        canvas.height = 300;
+        chartDiv.appendChild(canvas);
+
+        // Insert before the stats div
+        const statsDiv = document.getElementById("stats");
+        statsDiv.parentNode.insertBefore(chartDiv, statsDiv);
+      }
+
+      // Calculate WPM for each keystroke timing with a corrected formula
+      // The previous formula wasn't aligned with the Overall WPM calculation
+      const wpmValues = keyPressTimings.map(timing => ({
+        key: timing.key,
+        // Convert milliseconds to characters per minute, then to words per minute
+        // 60000 ms in a minute / timing in ms = keypresses per minute
+        // Then divide by 5 to get words per minute (standard 5 chars = 1 word)
+        wpm: (60000 / timing.timing) / 5
+      }));
+
+      // Use a simpler approach for transitions
+      const labels = [];
+      const chartWpmValues = [];
+
+      // Add letter transitions based on key press order
+      for (let i = 0; i < keyPressTimings.length; i++) {
+        const currentKey = keyPressTimings[i].key;
+
+        if (currentKey === "space") {
+          // Special case for space key
+          labels.push(`${word[word.length - 1]}->"space"`);
+          chartWpmValues.push(wpmValues[i].wpm);
+        } else if (i < word.length) {
+          // For normal letter transitions, create a label with the current position
+          // We need (i+1) because the first keypress is already typed
+          const currentPos = i;
+          const nextPos = i + 1;
+
+          if (nextPos < word.length) {
+            labels.push(`${word[currentPos]}->${word[nextPos]}`);
+            chartWpmValues.push(wpmValues[i].wpm);
+          }
+        }
+      }
+
+      // Add debug info
+      console.log("Word:", word);
+      console.log("Overall WPM:", overallWPM);
+      console.log("Key timings (ms):", keyPressTimings.map(t => t.timing));
+      console.log("Keystroke WPMs:", wpmValues.map(v => v.wpm.toFixed(1)));
+
+      // Get the keystroke canvas and create/update the chart
+      const canvas = document.getElementById("keystrokeCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Destroy any existing chart
+      if (window.keystrokeChart && typeof window.keystrokeChart.destroy === 'function') {
+        window.keystrokeChart.destroy();
+      }
+
+      // Only create the chart if we have valid data
+      if (labels.length > 0 && chartWpmValues.length > 0) {
+        window.keystrokeChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Keystroke WPM',
+                data: chartWpmValues,
+                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                pointRadius: 6,
+                pointHoverRadius: 8
+              },
+              {
+                label: `Overall Word WPM: ${utils.formatNumber(overallWPM)}`,
+                data: Array(labels.length).fill(overallWPM),
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: `Keystroke Timing for "${word}" (${utils.formatNumber(overallWPM)} WPM)`,
+                font: {
+                  size: 16
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    if (context.datasetIndex === 0) {
+                      return `WPM: ${utils.formatNumber(context.parsed.y)}`;
+                    } else {
+                      return `Overall WPM: ${utils.formatNumber(overallWPM)}`;
+                    }
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: false,
+                title: {
+                  display: true,
+                  text: 'WPM'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Letter Transitions'
+                }
+              }
+            }
+          }
+        });
+      }
     }
 
     function showResults() {
@@ -679,6 +860,7 @@
       container.innerHTML = testWords.map((word, i) => {
         let cls = "";
         let displayWord = word; // Default to showing the full word
+        let wordStyle = ""; // Initialize wordStyle as empty
 
         if (i === currentIndex) {
           // Add current class for positioning but not for underlining
@@ -697,11 +879,15 @@
           // If no typing has occurred, keep the full word visible
         } else if (i < currentIndex) {
           cls = "correct";
+          // Only apply bold style for slow words after they've been typed correctly
+          if (slowestWords.includes(word)) {
+            wordStyle = "font-weight: bold;";
+          }
         } else {
           displayWord = "_".repeat(word.length); // Show underscores for future words
         }
 
-        return `<span class="${cls}" data-index="${i}">${displayWord}</span>`;
+        return `<span class="${cls}" data-index="${i}" style="${wordStyle}">${displayWord}</span>`;
       }).join(" ");
     }
 
@@ -1107,3 +1293,4 @@
 </body>
 
 </html>
+```````
