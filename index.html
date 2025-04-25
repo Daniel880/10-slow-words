@@ -257,23 +257,26 @@
         return { word, avg5 };
       });
 
+      // Calculate average WPM based on avg5 from all words
+      const avgWPM = entries.length
+        ? utils.formatNumber(utils.calculateAverage(entries.map(e => e.avg5).filter(avg => isFinite(avg))))
+        : "-";
+
+      // Calculate slowest 10 words WPM (already working correctly)
       const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
       const avgOf10 = slow10.length ? utils.calculateAverage(slow10.map(e => e.avg5)) : 0;
 
-      const avgTestWPM = testWPMHistory.length
-        ? utils.formatNumber(utils.calculateAverage(testWPMHistory))
-        : "-";
-
-      const lastTestWPM = testWPMHistory.length
-        ? utils.formatNumber(testWPMHistory[testWPMHistory.length - 1])
-        : "-";
+      // Get last word WPM if history exists
+      const lastWordEntry = history.length > 0 ? history[history.length - 1] : null;
+      const lastWordWPM = lastWordEntry ? utils.formatNumber(lastWordEntry.wpm) : "-";
+      const lastWord = lastWordEntry ? lastWordEntry.word : "";
 
       const resultsDiv = document.getElementById("results");
       resultsDiv.innerHTML = `
         <h2>Statistics</h2>
         <div class="global-stats">
-          <div><strong>Last Test WPM:</strong> ${lastTestWPM}</div>
-          <div><strong>Average WPM:</strong> ${avgTestWPM}</div>
+          <div><strong>Last Word WPM (${lastWord}):</strong> ${lastWordWPM}</div>
+          <div><strong>Average WPM:</strong> ${avgWPM}</div>
           <div><strong>Slowest 10 Words WPM:</strong> ${utils.formatNumber(avgOf10)}</div>
         </div>
       `;
@@ -449,16 +452,27 @@
         const currentSpan = wordListSpans[currentIndex];
         // Only start replacing characters with underscores once typing begins
         if (typed.length > 0) {
-          const coloredWord = expected
+          let coloredWord = expected
             .split("")
             .map((char, idx) => {
               if (idx < typed.length) {
-                return `<span style="color: ${typed[idx] === char ? 'green' : 'red'};">${char}</span>`;
+                // Show typed character instead of expected character when there's a mismatch
+                return `<span style="color: ${typed[idx] === char ? 'green' : 'red'};">${typed[idx] === char ? char : typed[idx]}</span>`;
               } else {
                 return "_"; // Use underscores instead of asterisks for untyped characters
               }
             })
             .join("");
+
+          // Add any extra characters that exceed the word length
+          if (typed.length > expected.length) {
+            const extraChars = typed.substring(expected.length);
+            coloredWord += extraChars
+              .split("")
+              .map(char => `<span style="color: red;">${char}</span>`)
+              .join("");
+          }
+
           currentSpan.innerHTML = coloredWord;
         } else {
           // If no typing has started yet, show the full word
@@ -543,8 +557,9 @@
         renderWords();
       }
 
-      // Re-render the stats table after each word
+      // Re-render the stats table and update statistics display after each word
       renderStats();
+      updateResultsDisplay(); // Add this line to update the statistics after each word
     }
 
     function showResults() {
@@ -581,6 +596,12 @@
       testStartTime = null;
       startTime = null;
       document.getElementById("input").value = "";
+      const input = document.getElementById("input");
+      if (testWords[currentIndex]) {
+        input.placeholder = testWords[currentIndex];
+      } else {
+        input.placeholder = "Start typing...";
+      }
       history = [];
       renderWords();
       renderStats();
@@ -646,6 +667,15 @@
 
     function renderWords() {
       const container = document.getElementById("wordList");
+
+      // Update input placeholder to show the current word
+      const input = document.getElementById("input");
+      if (testWords[currentIndex]) {
+        input.placeholder = testWords[currentIndex];
+      } else {
+        input.placeholder = "Start typing...";
+      }
+
       container.innerHTML = testWords.map((word, i) => {
         let cls = "";
         let displayWord = word; // Default to showing the full word
