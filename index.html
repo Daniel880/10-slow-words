@@ -501,6 +501,26 @@
             key: "space",
             timing: timeBetweenKeys
           });
+
+          // Store the letter-to-space transition in pairTimings
+          const word = testWords[currentIndex];
+          const lastLetter = word[word.length - 1];
+          const pairKey = `${lastLetter}->space`;
+
+          if (!pairTimings[pairKey]) {
+            pairTimings[pairKey] = {
+              count: 0,
+              occurrences: []
+            };
+          }
+
+          pairTimings[pairKey].count++;
+          pairTimings[pairKey].occurrences.push(timeBetweenKeys);
+
+          // Keep only the last 100 occurrences to avoid excessive memory usage
+          if (pairTimings[pairKey].occurrences.length > 100) {
+            pairTimings[pairKey].occurrences.shift();
+          }
         }
 
         const word = this.value.trim();
@@ -551,6 +571,27 @@
             key: e.key,
             timing: timeBetweenKeys
           });
+
+          // Also store letter-to-letter transitions in pairTimings
+          if (this.value.length > 0) {
+            const prevChar = this.value[this.value.length - 1] || "";
+            const pairKey = `${prevChar}->${e.key}`;
+
+            if (!pairTimings[pairKey]) {
+              pairTimings[pairKey] = {
+                count: 0,
+                occurrences: []
+              };
+            }
+
+            pairTimings[pairKey].count++;
+            pairTimings[pairKey].occurrences.push(timeBetweenKeys);
+
+            // Keep only the last 100 occurrences
+            if (pairTimings[pairKey].occurrences.length > 100) {
+              pairTimings[pairKey].occurrences.shift();
+            }
+          }
         }
         lastKeyTime = now;
       }
@@ -613,17 +654,21 @@
         chartDiv.style.marginTop = "20px";
         chartDiv.style.marginBottom = "20px";
 
-        // Add a toggle button at the top of the chart div
-        const toggleButton = document.createElement("button");
-        toggleButton.textContent = "Hide Keystroke Chart";
-        toggleButton.onclick = toggleKeystrokeChart;
-        chartDiv.appendChild(toggleButton);
-
+        // Create the canvas first with increased height
         const canvas = document.createElement("canvas");
         canvas.id = "keystrokeCanvas";
         canvas.width = 800;
-        canvas.height = 300;
+        canvas.height = 200; // Increased to 2x the current height
         chartDiv.appendChild(canvas);
+
+        // Add a toggle button below the chart (with smaller styling)
+        const toggleButton = document.createElement("button");
+        toggleButton.textContent = "Hide Keystroke Chart";
+        toggleButton.onclick = toggleKeystrokeChart;
+        toggleButton.style.padding = "4px 8px"; // Smaller padding
+        toggleButton.style.fontSize = "0.8em"; // Smaller font
+        toggleButton.style.margin = "5px 0"; // Reduced margin
+        chartDiv.appendChild(toggleButton);
 
         // Insert before the stats div
         const statsDiv = document.getElementById("stats");
@@ -643,6 +688,7 @@
       // Use a simpler approach for transitions
       const labels = [];
       const chartWpmValues = [];
+      const historicalWpmValues = []; // Array for historical average WPM values
 
       // Add letter transitions based on key press order
       for (let i = 0; i < keyPressTimings.length; i++) {
@@ -650,17 +696,46 @@
 
         if (currentKey === "space") {
           // Special case for space key
-          labels.push(`${word[word.length - 1]}->"space"`);
+          const transitionKey = `${word[word.length - 1]}->"space"`;
+          labels.push(transitionKey);
           chartWpmValues.push(wpmValues[i].wpm);
+
+          // Get historical data for this transition
+          const pairKey = `${word[word.length - 1]}->space`;
+          const historicalData = pairTimings[pairKey];
+          if (historicalData && historicalData.occurrences && historicalData.occurrences.length > 0) {
+            const last10 = historicalData.occurrences.slice(-10);
+            const avgTime = last10.length ? last10.reduce((a, b) => a + b, 0) / last10.length : 0;
+            // Convert to WPM using the same formula
+            const historicalWpm = avgTime > 0 ? (60000 / avgTime) / 5 : 0;
+            historicalWpmValues.push(historicalWpm);
+          } else {
+            // No historical data for this transition
+            historicalWpmValues.push(null);
+          }
         } else if (i < word.length) {
-          // For normal letter transitions, create a label with the current position
-          // We need (i+1) because the first keypress is already typed
+          // For normal letter transitions
           const currentPos = i;
           const nextPos = i + 1;
 
           if (nextPos < word.length) {
-            labels.push(`${word[currentPos]}->${word[nextPos]}`);
+            const transitionKey = `${word[currentPos]}->${word[nextPos]}`;
+            labels.push(transitionKey);
             chartWpmValues.push(wpmValues[i].wpm);
+
+            // Get historical data for this transition
+            const pairKey = `${word[currentPos]}->${word[nextPos]}`;
+            const historicalData = pairTimings[pairKey];
+            if (historicalData && historicalData.occurrences && historicalData.occurrences.length > 0) {
+              const last10 = historicalData.occurrences.slice(-10);
+              const avgTime = last10.length ? last10.reduce((a, b) => a + b, 0) / last10.length : 0;
+              // Convert to WPM using the same formula
+              const historicalWpm = avgTime > 0 ? (60000 / avgTime) / 5 : 0;
+              historicalWpmValues.push(historicalWpm);
+            } else {
+              // No historical data for this transition
+              historicalWpmValues.push(null);
+            }
           }
         }
       }
@@ -688,13 +763,23 @@
             labels: labels,
             datasets: [
               {
-                label: 'Keystroke WPM',
+                label: 'Current Keystroke WPM',
                 data: chartWpmValues,
                 backgroundColor: 'rgba(54, 162, 235, 0.5)',
                 borderColor: 'rgba(54, 162, 235, 1)',
                 borderWidth: 2,
                 pointRadius: 6,
                 pointHoverRadius: 8
+              },
+              {
+                label: 'Historical Avg WPM (Last 10)',
+                data: historicalWpmValues,
+                backgroundColor: 'rgba(255, 159, 64, 0.5)',
+                borderColor: 'rgba(255, 159, 64, 1)',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointStyle: 'triangle'
               },
               {
                 label: `Overall Word WPM: ${utils.formatNumber(overallWPM)}`,
@@ -721,9 +806,11 @@
                 callbacks: {
                   label: function (context) {
                     if (context.datasetIndex === 0) {
-                      return `WPM: ${utils.formatNumber(context.parsed.y)}`;
+                      return `Current WPM: ${utils.formatNumber(context.parsed.y)}`;
+                    } else if (context.datasetIndex === 1) {
+                      return `Historical Avg WPM: ${context.parsed.y ? utils.formatNumber(context.parsed.y) : "No data"}`;
                     } else {
-                      return `Overall WPM: ${utils.formatNumber(overallWPM)}`;
+                      return `Overall Word WPM: ${utils.formatNumber(overallWPM)}`;
                     }
                   }
                 }
@@ -1316,4 +1403,3 @@
 </body>
 
 </html>
-````````
