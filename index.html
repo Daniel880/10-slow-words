@@ -613,6 +613,12 @@
         chartDiv.style.marginTop = "20px";
         chartDiv.style.marginBottom = "20px";
 
+        // Add a toggle button at the top of the chart div
+        const toggleButton = document.createElement("button");
+        toggleButton.textContent = "Hide Keystroke Chart";
+        toggleButton.onclick = toggleKeystrokeChart;
+        chartDiv.appendChild(toggleButton);
+
         const canvas = document.createElement("canvas");
         canvas.id = "keystrokeCanvas";
         canvas.width = 800;
@@ -740,6 +746,23 @@
             }
           }
         });
+      }
+    }
+
+    // Add this function to toggle the keystroke chart visibility
+    function toggleKeystrokeChart() {
+      const chartDiv = document.getElementById("keystrokeChart");
+      const canvas = document.getElementById("keystrokeCanvas");
+      const button = chartDiv.querySelector("button");
+
+      if (canvas.style.display === "none") {
+        // Show the chart
+        canvas.style.display = "block";
+        button.textContent = "Hide Keystroke Chart";
+      } else {
+        // Hide the chart
+        canvas.style.display = "none";
+        button.textContent = "Show Keystroke Chart";
       }
     }
 
@@ -1293,4 +1316,4 @@
 </body>
 
 </html>
-```````
+````````
