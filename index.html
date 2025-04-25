@@ -172,15 +172,27 @@
   <div class="word-list" id="wordList"></div>
   <input type="text" id="input" placeholder="Start typing..." autofocus />
   <div class="results" id="results"></div>
-  <div class="stats" id="stats"></div>
-  <canvas id="wpmChart" width="800" height="400"></canvas>
-  <canvas id="wordsScatterChart" width="800" height="400"></canvas>
+
+  <!-- Performance chart container with better visibility - before stats table -->
+  <div id="performanceChartContainer"
+    style="margin: 30px 0; padding: 20px; border: 1px solid #ccc; border-radius: 5px; background-color: #f9f9f9;">
+    <h3 style="margin-top: 0;">Performance History</h3>
+    <canvas id="wpmChart" width="800" height="300"></canvas>
+    <button onclick="togglePerformanceChart()" style="padding: 4px 8px; font-size: 0.8em; margin: 5px 0;">Hide
+      Performance Chart</button>
+  </div>
+
+  <!-- Stats table will be rendered here -->
+  <div id="statsContainer">
+    <div id="stats"></div>
+  </div>
+
   <button onclick="resetStats()">Reset All Stats</button>
   <button onclick="toggleTheme()">Toggle Dark Mode</button>
   <button onclick="refreshCharts()">Refresh Charts</button>
   <button onclick="renderConfusionMatrix()">Show Confusion Matrix</button>
   <div id="confusionMatrix"></div>
-  <div id="confusionMatrix"></div>
+  <canvas id="wordsScatterChart" width="800" height="400"></canvas>
 
   <script>
     let english1k = [];
@@ -853,6 +865,23 @@
       }
     }
 
+    // Add toggle function for performance chart
+    function togglePerformanceChart() {
+      const chartContainer = document.getElementById("performanceChartContainer");
+      const canvas = document.getElementById("wpmChart");
+      const button = chartContainer.querySelector("button");
+
+      if (canvas.style.display === "none") {
+        // Show the chart
+        canvas.style.display = "block";
+        button.textContent = "Hide Performance Chart";
+      } else {
+        // Hide the chart
+        canvas.style.display = "none";
+        button.textContent = "Show Performance Chart";
+      }
+    }
+
     function showResults() {
       const entries = Object.entries(wordStats).map(([word, data]) => {
         const last5 = data.last5 || [];
@@ -863,21 +892,120 @@
       const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
       const avgOf10 = slow10.length ? utils.calculateAverage(slow10.map(e => e.avg5)) : 0;
 
-      if (!isNaN(avgOf10)) {
-        slow10WPMHistory.push(parseFloat(avgOf10.toFixed(1)));
-      }
-
       const totalCharCount = testWords.reduce((sum, word) => sum + word.length, 0);
       const spacesCount = testWords.length - 1;
       const totalTimeMin = (performance.now() - testStartTime) / 1000 / 60;
       const overallWPM = ((totalCharCount + spacesCount) / 5) / totalTimeMin;
 
-      testWPMHistory.push(parseFloat(overallWPM.toFixed(1)));
+      // Only add to history if the test was completed
+      slow10WPMHistory.push(avgOf10);
+      // Instead of overallWPM, use the Average WPM from the stats (based on avg5 of all words)
+      const avgWPM = entries.length
+        ? utils.calculateAverage(entries.map(e => e.avg5).filter(avg => isFinite(avg)))
+        : 0;
+      testWPMHistory.push(avgWPM);
 
+      // Save immediately after adding new data points
       saveStatsToStorage();
+
+
       updateResultsDisplay();
       renderChart();
       renderWordsScatterChart();
+    }
+
+    function renderChart() {
+      if (testWPMHistory.length === 0) return;
+
+      // Calculate the same values that are shown in Statistics section
+      const entries = Object.entries(wordStats).map(([word, data]) => {
+        const last5 = data.last5 || [];
+        const avg5 = last5.length ? utils.calculateAverage(last5) : Infinity;
+        return { word, avg5 };
+      });
+
+      // Calculate average WPM based on avg5 from all words
+      const avgWPM = entries.length
+        ? utils.calculateAverage(entries.map(e => e.avg5).filter(avg => isFinite(avg)))
+        : 0;
+
+      // Calculate slowest 10 words WPM
+      const slow10 = entries.sort((a, b) => a.avg5 - b.avg5).slice(0, 10);
+      const avgOf10 = slow10.length ? utils.calculateAverage(slow10.map(e => e.avg5)) : 0;
+
+      // Create a rolling average line from test history
+      const avg5Line = [];
+      for (let i = 0; i < testWPMHistory.length; i++) {
+        if (i === testWPMHistory.length - 1) {
+          // For the last point, show the actual average from history
+          avg5Line.push(testWPMHistory[i]);
+        } else {
+          const slice = testWPMHistory.slice(Math.max(0, i - 4), i + 1);
+          avg5Line.push(utils.calculateAverage(slice));
+        }
+      }
+
+      const lastSlow10Avg = slow10WPMHistory.length > 0 ?
+        utils.formatNumber(slow10WPMHistory[slow10WPMHistory.length - 1]) : "0.0";
+      const lastAvg5 = avg5Line.length > 0 ?
+        utils.formatNumber(testWPMHistory[testWPMHistory.length - 1]) : "0.0";
+
+      const ctx = document.getElementById("wpmChart").getContext("2d");
+      try {
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
+            datasets: [
+              {
+                label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
+                data: slow10WPMHistory,
+                borderColor: 'blue',
+                backgroundColor: 'blue',
+                fill: false,
+                tension: 0.3,
+                pointRadius: 4
+              },
+              {
+                label: `Average WPM: ${lastAvg5} WPM`,
+                data: testWPMHistory, // Use full test history instead of rolling average
+                borderColor: 'orange',
+                backgroundColor: 'orange',
+                fill: false,
+                borderDash: [5, 5],
+                tension: 0.3,
+                pointRadius: 4
+              }
+            ]
+          },
+          options: {
+            plugins: {
+              title: {
+                display: true,
+                text: 'WPM Performance Over Time'
+              },
+              legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                  boxWidth: 15,
+                  padding: 15,
+                  font: {
+                    weight: 'bold'
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { title: { display: true, text: 'Test #' } },
+              y: { title: { display: true, text: 'WPM' }, beginAtZero: true }
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Error rendering chart:", err);
+      }
     }
 
     // Maintain all the other functions with small improvements
@@ -1116,78 +1244,6 @@
       });
     }
 
-    function renderChart() {
-      if (testWPMHistory.length === 0) return;
-
-      const avg5Line = [];
-      for (let i = 0; i < testWPMHistory.length; i++) {
-        const slice = testWPMHistory.slice(Math.max(0, i - 4), i + 1);
-        avg5Line.push(utils.calculateAverage(slice));
-      }
-
-      const lastSlow10Avg = slow10WPMHistory.length > 0 ?
-        utils.formatNumber(slow10WPMHistory[slow10WPMHistory.length - 1]) : "0.0";
-      const lastAvg5 = avg5Line.length > 0 ?
-        utils.formatNumber(avg5Line[avg5Line.length - 1]) : "0.0";
-
-      const ctx = document.getElementById("wpmChart").getContext("2d");
-      try {
-        if (chart) chart.destroy();
-        chart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: Array.from({ length: testWPMHistory.length }, (_, i) => i + 1),
-            datasets: [
-              {
-                label: `Avg WPM of 10 Slowest Words: ${lastSlow10Avg} WPM`,
-                data: slow10WPMHistory,
-                borderColor: 'blue',
-                backgroundColor: 'blue',
-                fill: false,
-                tension: 0.3,
-                pointRadius: 4
-              },
-              {
-                label: `Rolling Avg of Overall Tests: ${lastAvg5} WPM`,
-                data: avg5Line,
-                borderColor: 'orange',
-                backgroundColor: 'orange',
-                fill: false,
-                borderDash: [5, 5],
-                tension: 0.3,
-                pointRadius: 4
-              }
-            ]
-          },
-          options: {
-            plugins: {
-              title: {
-                display: true,
-                text: 'WPM Performance Over Time'
-              },
-              legend: {
-                display: true,
-                position: 'top',
-                labels: {
-                  boxWidth: 15,
-                  padding: 15,
-                  font: {
-                    weight: 'bold'
-                  }
-                }
-              }
-            },
-            scales: {
-              x: { title: { display: true, text: 'Test #' } },
-              y: { title: { display: true, text: 'WPM' }, beginAtZero: true }
-            }
-          }
-        });
-      } catch (err) {
-        console.error("Error rendering chart:", err);
-      }
-    }
-
     function renderWordsScatterChart() {
       const entries = Object.entries(wordStats).map(([word, data]) => {
         const last5 = data.last5 || [];
@@ -1323,12 +1379,29 @@
     function toggleTheme() {
       const dark = document.body.classList.toggle("dark");
       localStorage.setItem('theme', dark ? 'dark' : 'light');
+
+      // Update chart container styling based on theme
+      const chartContainer = document.getElementById("performanceChartContainer");
+      if (chartContainer) {
+        if (dark) {
+          chartContainer.style.backgroundColor = "#1e1e1e";
+          chartContainer.style.borderColor = "#444";
+        } else {
+          chartContainer.style.backgroundColor = "#f9f9f9";
+          chartContainer.style.borderColor = "#ccc";
+        }
+      }
     }
 
     function loadTheme() {
       const theme = localStorage.getItem('theme');
       if (theme === "dark") {
         document.body.classList.add("dark");
+        const chartContainer = document.getElementById("performanceChartContainer");
+        if (chartContainer) {
+          chartContainer.style.backgroundColor = "#1e1e1e";
+          chartContainer.style.borderColor = "#444";
+        }
       }
     }
 
