@@ -1509,13 +1509,10 @@
 
     loadTheme();
 
-    fetch('https://raw.githubusercontent.com/SMenigat/thousand-most-common-words/master/words/en.json')
+    fetch('https://raw.githubusercontent.com/monkeytypegame/monkeytype/refs/heads/master/frontend/static/languages/english.json')
       .then(res => res.json())
       .then(data => {
         english1k = data.words
-          .map(w => w.englishWord)
-          .filter(w => w)
-          .map(word => word.replace(/'/g, "'"));
         loadStatsFromStorage();
         startTest();
       });
