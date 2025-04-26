@@ -1102,9 +1102,7 @@
     }
 
     function getTestWords() {
-      if (Object.keys(wordStats).length === 0) {
-        return english1k.sort(() => 0.5 - Math.random()).slice(0, 20);
-      }
+      // Always identify the 10 slowest words first
       slowestWords = Object.entries(wordStats)
         .map(([word, stats]) => {
           const last5 = stats.last5 || [];
@@ -1115,8 +1113,36 @@
         .slice(0, 10)
         .map(e => e.word);
 
-      const random = english1k.sort(() => 0.5 - Math.random()).slice(0, 10);
-      return [...new Set([...slowestWords, ...random])].slice(0, 20);
+      // Find new words that haven't been typed yet
+      const knownWordSet = new Set(Object.keys(wordStats));
+      const newWords = english1k.filter(word => !knownWordSet.has(word));
+
+      console.log(`Found ${newWords.length} untyped words out of ${english1k.length} total words`);
+      console.log(`Have ${slowestWords.length} slow words to include`);
+
+      // If we have new untyped words, prioritize those
+      if (newWords.length > 0) {
+        // Shuffle the new words for randomness
+        const shuffledNewWords = [...newWords].sort(() => 0.5 - Math.random());
+
+        // Calculate how many new words we need (20 minus number of slow words, with duplicates removed)
+        const remainingSlots = 20 - slowestWords.length;
+        const selectedNewWords = shuffledNewWords.slice(0, remainingSlots);
+
+        console.log(`Selected ${selectedNewWords.length} new words to learn`);
+
+        // Combine slowest words with new words, ensure no duplicates
+        const testWords = [...new Set([...slowestWords, ...selectedNewWords])];
+        console.log(`Final test has ${testWords.length} words (${slowestWords.length} slow + ${testWords.length - slowestWords.length} new)`);
+
+        return testWords.slice(0, 20);
+      }
+      // If all words have been typed at least once, use random selection
+      else {
+        console.log("All words typed at least once, selecting random words");
+        const random = english1k.sort(() => 0.5 - Math.random()).slice(0, 10);
+        return [...new Set([...slowestWords, ...random])].slice(0, 20);
+      }
     }
 
     function renderWords() {
